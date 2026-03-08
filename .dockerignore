@@ -1,0 +1,33 @@
+# 환경변수 및 서비스 계정 키 — 절대 이미지에 포함하면 안 됨
+.env
+*.json
+
+# Git
+.git/
+.gitignore
+
+# Python 캐시
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# 문서
+*.md
+
+# IDE
+.vscode/
+.idea/
+
+# 테스트
+tests/
+.pytest_cache/
+
+# 로그
+*.log
