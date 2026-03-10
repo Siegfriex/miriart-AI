@@ -1,0 +1,3 @@
+# 개발/테스트용. CI 또는 로컬에서 pytest 실행 시 사용.
+-r requirements.txt
+pytest>=8.0.0

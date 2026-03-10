@@ -1,160 +1,110 @@
 """
 작품 이미지 분석 서비스. Gemini Vision으로 5축(밀도·형태·완성도·정합성·사고력) 채점.
 
-- 연계: routers/ai.analyze → 이 모듈 analyze_artwork; gemini_client로 GCS 다운로드·GenerativeModel 사용.
+- 연계: routers/ai.analyze → analyze_artwork; GcsService + call_gemini 사용.
 - Java BE AnalysisService가 /internal/ai/analyze 호출 후 결과를 DB에 저장.
+- GCS URI: 현재는 settings.gcs_bucket_name과 동일한 버킷의 URI(gs://{bucket}/...)만 지원.
+  다른 버킷 URI는 download_as_bytes에서 실패 시 GCSError(502)로 반환됨.
 """
-import asyncio
 import json
-import re
+import logging
 
-from fastapi import HTTPException
+from google.genai import types as genai_types
 
-from app.core.gemini_client import (
-    download_from_gcs,
-    get_generative_model,
-    parse_gcs_uri,
+from app.core.exceptions import GCSError, LLMParsingError
+from app.core.gemini_client import call_gemini, GeminiModel
+from app.core.config import get_settings
+from app.schemas.analyze import (
+    InternalAnalyzeRequest,
+    InternalAnalyzeResponse,
+    RadarData,
+    UniversityPrediction,
 )
-from app.schemas.analyze import InternalAnalyzeRequest, InternalAnalyzeResponse, RadarData
+from app.services.gcs_service import GcsService
 
-ANALYSIS_PROMPT_BASIC = """
-당신은 미대 입시 전문 채점 AI입니다. 다음 기초디자인 작품을 분석하세요.
+logger = logging.getLogger(__name__)
 
-[채점 기준]
-- 밀도 (density, 0-100): 오브젝트 수, 배치 균형, 공간 효율 (가중치 20%)
-- 형태력 (form, 0-100): 투시, 비례, 구조 안정성 (가중치 25%)
-- 완성도 (completion, 0-100): 마감, 디테일, 묘사력 (가중치 20%)
-- 정합성 (relevance, 0-100): 문제 이해, 조건 충족 (가중치 20%)
-- 사고력 (thinking, 0-100): 발상, 창의성 (가중치 15%)
+_settings = get_settings()
+gcs = GcsService(bucket_name=_settings.gcs_bucket_name, project_id=_settings.gcp_project_id)
 
-[출력 형식] JSON만 반환:
-{
-  "density": 85, "form": 80, "completion": 78, "relevance": 88, "thinking": 79,
-  "comment": "3~4문장 피드백"
-}
-"""
+ANALYZE_SYSTEM_PROMPT = """당신은 미술 입시 전문 AI 평가관입니다.
+업로드된 미술 작품 이미지를 분석하여 정확한 평가를 제공합니다.
 
-ANALYSIS_PROMPT_MAJOR = """
-당신은 미대 입시 전문 채점 AI입니다. 다음 전공 작품을 심층 분석하세요.
+평가 항목 (각 0~100점):
+- density: 밀도감, 화면 구성의 밀도
+- form: 형태력, 대상의 형태 정확도
+- completion: 완성도, 전체적인 마무리 수준
+- relevance: 주제 적합도, 출제 의도와의 부합
+- thinking: 사고력, 독창적 해석과 표현
 
-[채점 기준]
-- 밀도 (density, 0-100): 오브젝트 수, 배치 균형, 공간 효율 (가중치 20%)
-- 형태력 (form, 0-100): 투시, 비례, 구조 안정성 (가중치 25%)
-- 완성도 (completion, 0-100): 마감, 디테일, 묘사력 (가중치 20%)
-- 정합성 (relevance, 0-100): 문제 이해, 조건 충족 (가중치 20%)
-- 사고력 (thinking, 0-100): 발상, 창의성 (가중치 15%)
+등급: A(90+), B(75+), C(60+), D(45+), F(45-)
+fixScope: StructureRebuild(D이하) / DetailTuning(C이상)
 
-[출력 형식] JSON만 반환:
-{
-  "density": 85, "form": 80, "completion": 78, "relevance": 88, "thinking": 79,
-  "comment": "5~6문장 심층 피드백"
-}
-"""
+대학 예측: 5개 이내
+- line: TOP/HIGH/MID/LOW
+- probability: 0~100
+- similarAcceptedCount: 유사 합격 사례 수
 
-SCORE_FIELDS = ("density", "form", "completion", "relevance", "thinking")
-WEIGHTS = {"density": 0.20, "form": 0.25, "completion": 0.20, "relevance": 0.20, "thinking": 0.15}
+반드시 JSON으로 응답하세요."""
+
+ANALYZE_USER_TEMPLATE = """분석 유형: {analysis_type}
+{problem_text_line}
+
+위 미술 작품을 분석해주세요.
+
+응답 JSON:
+{{"grade":"A","totalScore":82,"radarData":{{"density":85,"form":80,"completion":78,"relevance":88,"thinking":79}},"fixScope":"DetailTuning","comment":"...","universityPredictions":[{{"university":"...","major":"...","line":"HIGH","probability":68,"similarAcceptedCount":14}}]}}"""
 
 
-def calculate_total_score(scores: dict) -> float:
-    """5축 점수와 가중치로 총점 계산. WEIGHTS(density 20%, form 25% 등) 적용."""
-    return sum(scores[k] * w for k, w in WEIGHTS.items())
-
-
-def calculate_grade(total_score: float) -> str:
-    """총점을 등급(A/B/C/D/F)으로 변환. Java AnalysisGrade enum과 대응."""
-    if total_score >= 90:
-        return "A"
-    if total_score >= 80:
-        return "B"
-    if total_score >= 70:
-        return "C"
-    if total_score >= 60:
-        return "D"
-    return "F"
-
-
-def calculate_fix_scope(scores: dict) -> str:
-    """밀도·형태·정합성으로 구조 점수 산출 후 FixScope(DetailTuning / StructureRebuild) 반환. Java FixScope enum과 대응."""
-    structure_score = scores["density"] * 0.3 + scores["form"] * 0.4 + scores["relevance"] * 0.3
-    return "DetailTuning" if structure_score >= 70 else "StructureRebuild"
-
-
-def parse_analysis_json(text: str) -> dict:
-    """Gemini 응답 텍스트에서 JSON 추출. ```json 코드블록 또는 첫 { } 블록 지원. SCORE_FIELDS·comment 필수."""
-    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if json_match:
-        raw = json_match.group(1)
-    else:
-        brace_match = re.search(r"\{.*\}", text, re.DOTALL)
-        if brace_match:
-            raw = brace_match.group(0)
-        else:
-            raise ValueError(f"Gemini 응답에서 JSON을 찾을 수 없습니다: {text[:200]}")
-
+async def analyze_artwork(req: InternalAnalyzeRequest) -> InternalAnalyzeResponse:
+    """GCS URI 이미지 다운로드 → Gemini Vision 호출 → JSON 파싱 → InternalAnalyzeResponse 반환.
+    현재는 동일 버킷(settings.gcs_bucket_name) URI만 정상 지원; 그 외는 GCS 실패 시 GCSError(502).
+    """
     try:
-        result = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"JSON 파싱 실패: {e}") from e
-
-    for field in (*SCORE_FIELDS, "comment"):
-        if field not in result:
-            raise ValueError(f"필수 필드 누락: {field}")
-
-    return result
-
-
-async def analyze_artwork(request: InternalAnalyzeRequest) -> InternalAnalyzeResponse:
-    """GCS URI 이미지 다운로드 → Gemini Vision(gemini-2.5-pro-preview) 호출 → JSON 파싱·총점·등급·fix_scope·radar_data 반환."""
-    try:
-        bucket_name, blob_path = parse_gcs_uri(request.gcs_uri)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    try:
-        image_bytes, mime_type = await download_from_gcs(bucket_name, blob_path)
+        image_bytes = gcs.download_as_bytes(req.gcs_uri)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GCS 이미지 로드 실패: {e}")
+        raise GCSError(f"Failed to download image from {req.gcs_uri}: {e}")
 
-    prompt = ANALYSIS_PROMPT_MAJOR if request.analysis_type == "major" else ANALYSIS_PROMPT_BASIC
-    if request.problem_text:
-        prompt = f"[문제/맥락]\n{request.problem_text}\n\n{prompt}"
-
-    try:
-        from vertexai.generative_models import Part
-
-        model = get_generative_model("gemini-2.5-pro-preview")
-
-        def _call_gemini() -> str:
-            response = model.generate_content([
-                Part.from_bytes(image_bytes, mime_type=mime_type),
-                prompt,
-            ])
-            return response.text
-
-        response_text = await asyncio.to_thread(_call_gemini)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini Vision 호출 실패: {e}")
-
-    try:
-        result = parse_analysis_json(response_text)
-    except ValueError as e:
-        raise HTTPException(status_code=502, detail=f"AI 응답 파싱 실패: {e}")
-
-    total_score = calculate_total_score(result)
-    grade = calculate_grade(total_score)
-    fix_scope = calculate_fix_scope(result)
-
-    return InternalAnalyzeResponse(
-        grade=grade,
-        total_score=round(total_score, 2),
-        radar_data=RadarData(
-            density=result["density"],
-            form=result["form"],
-            completion=result["completion"],
-            relevance=result["relevance"],
-            thinking=result["thinking"],
-        ),
-        fix_scope=fix_scope,
-        comment=result["comment"],
-        university_predictions=[],  # Phase 2: Theory Engine 연동
+    problem_line = f"문제/주제: {req.problem_text}" if req.problem_text else ""
+    user_text = ANALYZE_USER_TEMPLATE.format(
+        analysis_type=req.analysis_type,
+        problem_text_line=problem_line,
     )
+
+    contents = [
+        genai_types.Part.from_text(user_text),
+        genai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+    ]
+
+    raw = await call_gemini(
+        model=GeminiModel.FLASH,
+        contents=contents,
+        system_instruction=ANALYZE_SYSTEM_PROMPT,
+        purpose="analyze_artwork",
+        temperature=0.3,
+        max_output_tokens=2048,
+        response_mime_type="application/json",
+    )
+
+    try:
+        data = json.loads(raw)
+        radar = data["radarData"]
+        return InternalAnalyzeResponse(
+            grade=data["grade"],
+            total_score=float(data["totalScore"]),
+            radar_data=RadarData(
+                density=radar["density"],
+                form=radar["form"],
+                completion=radar["completion"],
+                relevance=radar["relevance"],
+                thinking=radar["thinking"],
+            ),
+            fix_scope=data["fixScope"],
+            comment=data["comment"],
+            university_predictions=[
+                UniversityPrediction(**u)
+                for u in data.get("universityPredictions", [])
+            ],
+        )
+    except (json.JSONDecodeError, KeyError) as e:
+        raise LLMParsingError(f"Analyze parsing failed: {e}, raw: {raw[:300]}")

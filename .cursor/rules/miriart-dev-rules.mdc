@@ -1,0 +1,160 @@
+```md
+---
+description: MiriArt 개발 환경 룰 - Cursor 편집, WSL 실행, 모노레포 구조, GCP/WSL 전용
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# MiriArt 개발 환경 룰 (WSL ext4 기준)
+
+## 1. 환경/역할 분리
+
+- **코드 편집**: Cursor (WSL 연동) — `WSL: Ubuntu-24.04` 컨텍스트로 연다.  
+  - 항상 **WSL 터미널에서 `cursor .` 명령으로** 프로젝트를 연다.  
+  - Windows 탐색기에서 `C:\...` 또는 `\\wsl$...`를 더블클릭해서 여는 방식은 사용하지 않는다.
+
+- **실행/배포**: Ubuntu WSL 셸에서만 실행되는 터미널 —  
+  `npm run dev`, `./gradlew bootRun`, `uvicorn`, `docker`, `gcloud` 등 **모든 실행·배포 명령**은 WSL 환경에서만 실행한다.
+
+- **실행 파일은 반드시 WSL 쪽 사용**: 프로젝트를 WSL에서 열었을 때, 터미널에서 쓰는 `npm`, `node`, `python`, `java`, `pip`, `./gradlew` 등은 **WSL에 설치된 것**이어야 한다. `which npm`이 `/mnt/c/...` 이면 Windows npm이므로 esbuild/UNC 오류 등이 난다. WSL에서는 Linux 경로(`/usr/bin/...` 또는 `~/.nvm/...`)만 사용한다.
+
+- **GPU / Docker**: NVIDIA GPU는 **WSL Ubuntu + Docker** 조합에서만 사용하며,  
+  GPU가 필요한 컨테이너는 항상 `--gpus all` 옵션을 붙여 실행한다.
+
+### 경로
+
+- **프로젝트 실제 루트 (WSL)**  
+  - `/home/sieg/projects-wsl/MiriArt`  
+  - GitHub `Siegfriex/MiriArt` `deploy` 브랜치와 1:1 대응하는 **모노레포 루트**.
+
+- **Cursor에서 여는 루트**
+
+  ```bash
+  cd ~/projects-wsl/MiriArt
+  cursor .
+  ```
+
+- **금지 패턴 (사용하지 않는다)**  
+  - `C:\Users\6sieg\Dev\MiriArt`를 직접 Cursor로 여는 것  
+  - `~/projects` → `/mnt/c/Users/6sieg/Dev` 심볼릭 링크 기반 경로  
+  - `/mnt/c/...` 경로에서 Gradle / npm / pytest / Claude Code 실행
+
+---
+
+## 2. 폴더 구조 (모노레포)
+
+```text
+MiriArt/
+  src/           # FE React
+  package.json
+  vite.config.ts
+  ...
+  docs/          # 설계·인프라·SSOT·디자인 문서 (docs/SSOT, docs/design 등)
+  miriart-be/    # Spring Boot BE
+  miriart-ai/    # FastAPI AI 서버
+```
+
+- 새 서브 프로젝트는 **반드시 이 루트 아래**에만 생성한다.
+- `be`, `ai-models` 등 루트와 별도인 상위 폴더는 만들지 않는다.
+- **설계·인프라·SSOT·디자인 문서**는 루트가 아닌 **`docs/`** 아래에 둔다.  
+  (예: `docs/SSOT/`, `docs/design/`, `.cursor/rules/infra-ssot.mdc`, `docs/CURSOR_RULES_DOCS_SSOT_산출서.md`)
+
+---
+
+## 3. Cursor 내 터미널 사용
+
+- **GCP / Docker / Java / Python / GPU 관련 명령은 Windows 환경 터미널에서 실행하지 않는다.**
+
+- 아래 명령은 **반드시 Ubuntu WSL 셸에서만** 실행한다  
+  (Cursor 통합 터미널도 셸은 WSL이어야 함):
+
+  - `gcloud ...`, `gsutil ...`
+  - `docker ...`, `docker compose ...` (**GPU 컨테이너는 항상 `--gpus all` 사용**)
+  - `./gradlew ...`
+  - `uvicorn ...`
+  - `python3 -m venv ...`, `pip install ...`
+  - `npm run dev`, `npm run build`
+
+- Cursor에서 터미널을 사용할 경우, **반드시 "WSL: Ubuntu-24.04" 셸**을 연다.  
+  - 방법 예시: WSL 터미널에서 `cursor .` 실행 후, Cursor 내부 터미널을 사용.
+
+---
+
+## 3.1 Windows 전용 스크립트 (WSL에서는 사용 금지)
+
+아래 파일은 **Windows(PowerShell/CMD)에서만** 사용한다. WSL에서는 실행하지 않고, 대신 표준 dev 명령(섹션 4)의 bash 명령을 쓴다.
+
+| 파일 | 용도 | WSL에서 할 일 |
+|------|------|----------------|
+| `miriart-be/gradlew.bat` | Gradle (Windows) | `./gradlew` (bash) 사용 |
+| `miriart-be/scripts/run-dev.ps1` | BE dev 실행 (Windows) | `./gradlew bootRun` (miriart-be에서) |
+| `miriart-be/scripts/cloudrun-redeploy.ps1` | Cloud Run 배포 | WSL 터미널에서 `gcloud` 직접 실행 |
+| `miriart-be/set-java.ps1` | Windows JDK 경로 설정 | WSL에서는 불필요 (Linux Java 사용) |
+| `miriart-ai/setup_venv_and_verify.ps1` | venv 재생성·검증 (Windows) | `RUN_VENV_SETUP.md`의 "WSL 사용자" 섹션 참고 |
+| `delete-unused-docs.ps1` | docs 정리 (Windows) | WSL에서는 bash로 동일 로직 구현 또는 해당 스크립트 미사용 |
+
+---
+
+## 4. 표준 dev 명령 (WSL 전용)
+
+WSL(Ubuntu) 셸에서:
+
+```bash
+cd ~/projects-wsl/MiriArt
+
+# FE
+npm install         # 최초 한 번
+npm run dev         # http://localhost:3000 또는 5173
+
+# BE
+cd ~/projects-wsl/MiriArt/miriart-be
+./gradlew bootRun   # http://localhost:8080
+
+# AI
+cd ~/projects-wsl/MiriArt/miriart-ai
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+---
+
+## 5. GCP / gcloud
+
+- **gcloud / ADC는 WSL에만** 설치·사용한다.
+- Cursor(Windows) 쪽에는 gcloud 설치·ADC 설정을 하지 않는다.
+- GCP 리소스 생성/수정/조회는 **전부 WSL 터미널에서만** 수행한다.
+
+- 기준 설정 예:
+
+  - `gcloud config list` → project=`miriarts`, region=`asia-northeast3`
+  - `gcloud auth list` → `6siegfriex@argo.ai.kr`
+  - `gcloud auth application-default login` (이미 완료된 상태 유지)
+
+---
+
+## 6. Python / venv (miriart-ai)
+
+- **`(.venv)`가 프롬프트에 보일 때** `pip install ...` 하면 → 그 venv 전용으로만 설치된다.
+- **`deactivate` 한 뒤에 `pip`가 없다고 나오는 것**은,  
+  WSL 글로벌에는 pip를 두지 않았기 때문에 **정상**이다.
+
+**miriart-ai에서는 항상** 다음 순서를 지킨다:
+
+```bash
+cd ~/projects-wsl/MiriArt/miriart-ai
+source .venv/bin/activate   # 프롬프트에 (.venv) 보이게
+```
+
+그 다음에만 `pip install ...`, `python ...`을 쓴다.  
+이렇게 하면 다른 프로젝트와 섞이지 않고, `requirements.txt`로 배포/재현이 깔끔해진다.
+
+**BigQuery 연결 빠른 확인** (venv 활성화 후):
+
+```bash
+cd ~/projects-wsl/MiriArt/miriart-ai
+source .venv/bin/activate
+python -c "from google.cloud import bigquery; c = bigquery.Client(project='miriarts'); print(list(c.query('SELECT 1').result()))"
+```

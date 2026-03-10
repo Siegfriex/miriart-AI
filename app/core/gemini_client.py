@@ -1,83 +1,161 @@
 """
-GCS 파일 다운로드/업로드 및 Vertex AI 클라이언트 래퍼 모듈.
+Google GenAI(Vertex AI) 클라이언트 및 공통 LLM 호출 래퍼.
 
-- 연계: analyze_service, image_edit_service에서 import하여 사용.
-- get_generative_model() → Vertex AI GenerativeModel 인스턴스 반환.
-- download_from_gcs(bucket_name, blob_path) → GCS에서 바이트·MIME 타입 다운로드.
-- upload_to_gcs(...) → 처리 결과를 GCS에 저장 후 공개 URL 반환.
+- vertexai SDK 제거, google-genai SDK 사용 (Vertex AI 백엔드).
+- GCS 관련 함수는 app.services.gcs_service로 이전.
 """
 import asyncio
-from typing import Optional
+import logging
+import time
+from typing import Any, List, Optional
 
-import vertexai
-from google.cloud import storage
-from vertexai.generative_models import GenerativeModel
+from google import genai
+from google.genai import types
 
 from app.core.config import get_settings
+from app.core.exceptions import LLMServiceError, LLMTimeoutError
 
-_initialized = False
+logger = logging.getLogger(__name__)
 
-
-def init_vertex_ai() -> None:
-    """Vertex AI를 초기화한다. 앱 시작 시 main.lifespan에서 1회 호출."""
-    global _initialized
-    if _initialized:
-        return
-    settings = get_settings()
-    vertexai.init(project=settings.gcp_project_id, location=settings.gcp_region)
-    _initialized = True
+_client: Optional[genai.Client] = None
 
 
-def get_generative_model(model_name: str, system_instruction: Optional[str] = None) -> GenerativeModel:
-    """Vertex AI GenerativeModel 인스턴스 반환. chat_service, analyze_service, image_edit_service에서 사용."""
-    init_vertex_ai()
-    if system_instruction:
-        return GenerativeModel(model_name, system_instruction=system_instruction)
-    return GenerativeModel(model_name)
+def get_genai_client() -> genai.Client:
+    """GenAI Client 싱글턴. vertexai=True로 Vertex AI 백엔드 사용."""
+    global _client
+    if _client is None:
+        settings = get_settings()
+        _client = genai.Client(
+            vertexai=True,
+            project=settings.gcp_project_id,
+            location=settings.gcp_region,
+            http_options=types.HttpOptions(
+                timeout=28 * 1000,  # 28s (BE 30s - 2s margin)
+                retry_options=types.HttpRetryOptions(
+                    attempts=3,
+                    initial_delay=1.0,
+                    max_delay=8.0,
+                    exp_base=2.0,
+                    jitter=0.5,
+                    http_status_codes=[429, 500, 502, 503, 504],
+                ),
+            ),
+        )
+        logger.info(
+            "GenAI client initialized (project=%s, region=%s)",
+            settings.gcp_project_id,
+            settings.gcp_region,
+        )
+    return _client
 
 
-def get_storage_client() -> storage.Client:
-    """GCS Storage 클라이언트 반환. config의 gcp_project_id 사용."""
-    settings = get_settings()
-    return storage.Client(project=settings.gcp_project_id)
+class GeminiModel:
+    """Gemini 모델 ID 상수."""
+
+    FLASH = "gemini-2.5-flash"
+    PRO = "gemini-2.5-pro"
+    FLASH_LITE = "gemini-2.0-flash-lite"
 
 
-def parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
-    """GCS URI를 (bucket_name, blob_path) 튜플로 파싱. download_from_gcs 등에서 사용."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"유효하지 않은 GCS URI: {gcs_uri}")
-    path = gcs_uri[len("gs://"):]
-    bucket_name, _, blob_path = path.partition("/")
-    return bucket_name, blob_path
+async def call_gemini(
+    model: str,
+    contents: Any,
+    *,
+    system_instruction: Optional[str] = None,
+    purpose: str = "unknown",
+    timeout_override_s: Optional[int] = None,
+    temperature: float = 0.7,
+    max_output_tokens: int = 4096,
+    response_mime_type: Optional[str] = None,
+    return_response: bool = False,
+) -> Any:
+    """
+    모든 Gemini 호출의 단일 진입점.
+    - asyncio.wait_for로 Python-level timeout 보장
+    - 에러를 LLMTimeoutError / LLMServiceError로 분류
+    - 구조화 로그 출력
+    - return_response=True 시 raw response 객체 반환 (image-edit 등에서 사용)
+    """
+    client = get_genai_client()
+    effective_timeout = timeout_override_s or 28
 
+    config = types.GenerateContentConfig(
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+        system_instruction=system_instruction,
+    )
+    if response_mime_type:
+        config.response_mime_type = response_mime_type
 
-async def download_from_gcs(bucket_name: str, blob_path: str) -> tuple[bytes, str]:
-    """GCS에서 이미지 bytes와 MIME 타입을 비동기로 다운로드. analyze_service, image_edit_service에서 사용."""
-    def _download() -> tuple[bytes, str]:
-        client = get_storage_client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
-        data = blob.download_as_bytes()
-        # blob.content_type은 download_as_bytes() 후 메타데이터에서 읽힘
-        mime = blob.content_type or _infer_mime_from_path(blob_path)
-        return data, mime
+    start = time.monotonic()
+    try:
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                client.models.generate_content,
+                model=model,
+                contents=contents,
+                config=config,
+            ),
+            timeout=effective_timeout,
+        )
+        latency = time.monotonic() - start
+        if return_response:
+            logger.info(
+                "gemini_call_success",
+                extra={
+                    "purpose": purpose,
+                    "model": model,
+                    "latency_s": round(latency, 2),
+                    "output_len": 0,
+                },
+            )
+            return response
+        text = (response.text or "").strip() if hasattr(response, "text") else ""
+        if not text and hasattr(response, "candidates") and response.candidates:
+            cand = response.candidates[0]
+            if hasattr(cand, "content") and cand.content and hasattr(cand.content, "parts"):
+                for part in cand.content.parts:
+                    if hasattr(part, "text") and part.text:
+                        text = part.text.strip()
+                        break
+        logger.info(
+            "gemini_call_success",
+            extra={
+                "purpose": purpose,
+                "model": model,
+                "latency_s": round(latency, 2),
+                "output_len": len(text),
+            },
+        )
+        return text
 
-    return await asyncio.to_thread(_download)
+    except asyncio.TimeoutError:
+        latency = time.monotonic() - start
+        logger.warning(
+            "gemini_call_timeout",
+            extra={
+                "purpose": purpose,
+                "model": model,
+                "timeout_s": effective_timeout,
+                "latency_s": round(latency, 2),
+            },
+        )
+        raise LLMTimeoutError(
+            f"Gemini '{purpose}' timed out after {effective_timeout}s"
+        )
 
-
-def _infer_mime_from_path(path: str) -> str:
-    """경로 확장자에서 MIME 타입을 추론한다. 알 수 없으면 image/jpeg 반환."""
-    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-    return {"png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/jpeg")
-
-
-async def upload_to_gcs(bucket_name: str, blob_path: str, data: bytes, content_type: str = "image/jpeg") -> str:
-    """bytes를 GCS에 업로드 후 공개 URL 반환. image_edit_service에서 편집 결과 저장 시 사용."""
-    def _upload() -> str:
-        client = get_storage_client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
-        blob.upload_from_string(data, content_type=content_type)
-        return f"https://storage.googleapis.com/{bucket_name}/{blob_path}"
-
-    return await asyncio.to_thread(_upload)
+    except Exception as e:
+        latency = time.monotonic() - start
+        logger.error(
+            "gemini_call_error",
+            extra={
+                "purpose": purpose,
+                "model": model,
+                "error": str(e),
+                "latency_s": round(latency, 2),
+            },
+            exc_info=True,
+        )
+        raise LLMServiceError(
+            f"Gemini '{purpose}' failed: {type(e).__name__}: {e}"
+        )

@@ -1,126 +1,98 @@
 """
-AI 멘토 채팅 서비스. Gemini 멀티모델로 대화 생성 및 퀵리플라이 생성.
+AI 멘토 채팅 서비스. Gemini로 대화 생성. 기본 퀵리플라이 3개 반환.
 
-- 연계: routers/ai.chat → 이 모듈 chat; Java AiProxyService가 /internal/ai/chat 호출, Redis에 히스토리 저장.
-- sticky_context(등급·점수·fix_scope)로 시스템 프롬프트 분기.
+- 연계: routers/ai.chat → chat; Java AiProxyService가 /internal/ai/chat 호출, Redis에 히스토리 저장.
+- sticky_context(등급·점수·fix_scope)로 시스템 프롬프트에 반영.
 """
-import asyncio
 import base64
-import json
-import re
-from typing import List, Optional
+import logging
+from typing import Optional
 
-from fastapi import HTTPException
+from google.genai import types as genai_types
 
-from app.core.gemini_client import get_generative_model
-from app.schemas.chat import HistoryItem, InternalChatRequest, InternalChatResponse, StickyContext
+from app.core.gemini_client import call_gemini, GeminiModel
+from app.core.exceptions import ValidationError
+from app.schemas.chat import InternalChatRequest, InternalChatResponse
 
-MODEL_MAP: dict[str, str] = {
-    "CHAT_PRO": "gemini-2.5-pro-preview",
-    "FAST": "gemini-2.5-flash-lite",
-    "THINKING": "gemini-2.5-pro",
-    "SEARCH": "gemini-2.5-flash",
-    "IMAGE_EDIT": "gemini-2.0-flash-exp",
+logger = logging.getLogger(__name__)
+
+MODEL_MAP = {
+    "CHAT_PRO": GeminiModel.PRO,
+    "FAST": GeminiModel.FLASH,
+    "THINKING": GeminiModel.PRO,
+    "SEARCH": GeminiModel.FLASH,
+    "IMAGE_EDIT": GeminiModel.FLASH,
 }
 
-QUICK_REPLY_PROMPT = """
-다음 AI 응답을 읽고, 사용자가 다음에 물어볼 만한 자연스러운 후속 질문 3개를 생성하세요.
-각 질문은 15자 이내로 간결하게 작성하세요.
+CHAT_SYSTEM_PROMPT = """당신은 MiriArt의 미술 입시 AI 멘토입니다.
+학생의 미술 작품 분석 결과와 맥락을 바탕으로 친절하고 전문적인 상담을 제공합니다.
 
-[AI 응답]
-{response_text}
+규칙:
+1. 미술 전문 용어를 사용하되, 고등학생이 이해할 수 있게 설명하세요.
+2. 구체적이고 실천 가능한 조언을 제공하세요.
+3. 학생의 현재 수준(grade, fixScope)을 고려한 맞춤 조언을 하세요.
+4. 격려와 동기부여를 포함하되, 현실적인 피드백도 함께 제공하세요.
+5. 200자 이내로 간결하게 답변하세요."""
 
-[출력 형식] JSON 배열만 반환:
-["질문1", "질문2", "질문3"]
-"""
+
+def _flatten_history(history: Optional[list]) -> str:
+    """히스토리를 [role]: text 형식의 단일 텍스트로 변환."""
+    if not history:
+        return ""
+    lines = []
+    for h in history:
+        role = getattr(h, "role", None) or (h.get("role", "user") if isinstance(h, dict) else "user")
+        parts = getattr(h, "parts", None) or (h.get("parts", []) if isinstance(h, dict) else [])
+        text = ""
+        if parts and isinstance(parts, list) and len(parts) > 0:
+            first = parts[0]
+            text = first.get("text", "") if isinstance(first, dict) else getattr(first, "text", "")
+        elif isinstance(h, dict):
+            text = h.get("text", "")
+        lines.append(f"[{role}]: {text}")
+    return "\n".join(lines)
 
 
-def build_system_prompt(sticky_context: StickyContext) -> str:
-    """등급·점수·fix_scope(StructureRebuild/DetailTuning)에 따라 멘토 시스템 프롬프트 분기."""
-    base = f"당신은 미대 입시 전문 AI 멘토입니다. 현재 학생의 작품 등급은 {sticky_context.grade}이며 점수는 {sticky_context.score}점입니다.\n\n"
-    if sticky_context.fix_scope == "StructureRebuild":
-        return (
-            base
-            + "구도/주제 해석/시선 흐름 중심으로 피드백을 제공하세요. "
-            "구조 재설계 방법을 구체적으로 제시하세요. "
-            "미학적 조언이나 색감·톤 언급은 금지입니다."
-        )
-    return (
-        base
-        + "마감/밀도/톤 개선 중심으로 피드백을 제공하세요. "
-        "디테일 향상 방법을 구체적으로 제시하세요. "
-        "구조·구도 변경 언급은 금지입니다."
+async def chat(req: InternalChatRequest) -> InternalChatResponse:
+    """MODEL_MAP으로 모델 선택 → sticky_context 반영 → 히스토리+메시지(이미지 선택) → call_gemini → 고정 퀵리플라이 반환."""
+    model_name = MODEL_MAP.get(req.model_type, GeminiModel.FLASH)
+
+    system = CHAT_SYSTEM_PROMPT
+    if req.sticky_context:
+        ctx = req.sticky_context
+        system += f"\n\n학생 분석 결과: grade={ctx.grade}, score={ctx.score}, fixScope={ctx.fix_scope}"
+
+    history_text = _flatten_history(req.history)
+    messages = f"{history_text}\n[user]: {req.message}\n" if history_text else f"[user]: {req.message}\n"
+
+    if req.image_base64:
+        try:
+            image_bytes = base64.b64decode(req.image_base64)
+        except Exception as e:
+            raise ValidationError(f"imageBase64 디코딩 실패: {e}")
+        mime = req.image_mime_type or "image/jpeg"
+        contents = [
+            genai_types.Part.from_text(messages),
+            genai_types.Part.from_bytes(data=image_bytes, mime_type=mime),
+        ]
+    else:
+        contents = messages
+
+    raw = await call_gemini(
+        model=model_name,
+        contents=contents,
+        system_instruction=system,
+        purpose="chat",
+        temperature=0.7,
+        max_output_tokens=1024,
     )
 
-
-def convert_history(history: Optional[List[HistoryItem]]):
-    """Java BE에서 전달한 히스토리(Redis 기반)를 Vertex AI Chat Content 목록으로 변환."""
-    from vertexai.generative_models import Content, Part
-
-    if not history:
-        return []
-
-    contents = []
-    for item in history:
-        parts = [Part.from_text(p["text"]) for p in item.parts if "text" in p]
-        contents.append(Content(role=item.role, parts=parts))
-    return contents
-
-
-async def generate_quick_replies(response_text: str) -> List[str]:
-    """AI 응답 텍스트로 후속 질문 3개 생성(gemini-2.5-flash-lite). 파싱 실패 시 빈 리스트."""
-    try:
-        model = get_generative_model("gemini-2.5-flash-lite")
-        prompt = QUICK_REPLY_PROMPT.format(response_text=response_text[:500])
-
-        def _call() -> str:
-            return model.generate_content(prompt).text
-
-        raw = await asyncio.to_thread(_call)
-
-        json_match = re.search(r"\[.*?\]", raw, re.DOTALL)
-        if json_match:
-            replies = json.loads(json_match.group(0))
-            if isinstance(replies, list):
-                return [str(r) for r in replies[:3]]
-    except Exception:
-        pass
-    return []
-
-
-async def chat(request: InternalChatRequest) -> InternalChatResponse:
-    """MODEL_MAP으로 모델 선택 → sticky_context로 시스템 프롬프트 설정 → 히스토리+메시지(이미지可选) 전송 → 퀵리플라이 생성 후 응답 반환."""
-    model_name = MODEL_MAP.get(request.model_type, "gemini-2.5-pro-preview")
-
-    system_prompt = build_system_prompt(request.sticky_context) if request.sticky_context else None
-    model = get_generative_model(model_name, system_instruction=system_prompt)
-
-    history_contents = convert_history(request.history)
-
-    try:
-        from vertexai.generative_models import Part
-
-        def _call_gemini() -> str:
-            chat_session = model.start_chat(history=history_contents)
-            if request.image_base64:
-                image_bytes = base64.b64decode(request.image_base64)
-                mime = request.image_mime_type or "image/jpeg"
-                response = chat_session.send_message([
-                    Part.from_bytes(image_bytes, mime_type=mime),
-                    request.message,
-                ])
-            else:
-                response = chat_session.send_message(request.message)
-            return response.text
-
-        response_text = await asyncio.to_thread(_call_gemini)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI 멘토 연결에 실패했습니다: {e}")
-
-    quick_replies = await generate_quick_replies(response_text)
-
     return InternalChatResponse(
-        text=response_text,
+        text=raw.strip(),
         grounding_urls=[],
-        quick_replies=quick_replies,
+        quick_replies=[
+            "이 부분을 더 자세히 알려주세요",
+            "연습 방법을 추천해주세요",
+            "비슷한 대학은 어디가 있나요?",
+        ],
     )
