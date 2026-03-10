@@ -6,6 +6,7 @@
 - GCS URI: 현재는 settings.gcs_bucket_name과 동일한 버킷의 URI(gs://{bucket}/...)만 지원.
   다른 버킷 URI는 download_as_bytes에서 실패 시 GCSError(502)로 반환됨.
 """
+import asyncio
 import json
 import logging
 
@@ -26,6 +27,20 @@ logger = logging.getLogger(__name__)
 
 _settings = get_settings()
 gcs = GcsService(bucket_name=_settings.gcs_bucket_name, project_id=_settings.gcp_project_id)
+
+_MIME_MAP = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG": "image/png",
+    b"RIFF": "image/webp",
+}
+
+
+def _detect_mime(data: bytes) -> str:
+    """이미지 바이트의 매직 바이트로 MIME 타입 추론. 실패 시 image/jpeg 기본."""
+    for magic, mime in _MIME_MAP.items():
+        if data[:len(magic)] == magic:
+            return mime
+    return "image/jpeg"
 
 ANALYZE_SYSTEM_PROMPT = """당신은 미술 입시 전문 AI 평가관입니다.
 업로드된 미술 작품 이미지를 분석하여 정확한 평가를 제공합니다.
@@ -61,9 +76,11 @@ async def analyze_artwork(req: InternalAnalyzeRequest) -> InternalAnalyzeRespons
     현재는 동일 버킷(settings.gcs_bucket_name) URI만 정상 지원; 그 외는 GCS 실패 시 GCSError(502).
     """
     try:
-        image_bytes = gcs.download_as_bytes(req.gcs_uri)
+        image_bytes = await asyncio.to_thread(gcs.download_as_bytes, req.gcs_uri)
     except Exception as e:
         raise GCSError(f"Failed to download image from {req.gcs_uri}: {e}")
+
+    mime_type = _detect_mime(image_bytes)
 
     problem_line = f"문제/주제: {req.problem_text}" if req.problem_text else ""
     user_text = ANALYZE_USER_TEMPLATE.format(
@@ -73,7 +90,7 @@ async def analyze_artwork(req: InternalAnalyzeRequest) -> InternalAnalyzeRespons
 
     contents = [
         genai_types.Part.from_text(user_text),
-        genai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+        genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
     ]
 
     raw = await call_gemini(

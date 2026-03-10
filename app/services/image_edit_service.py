@@ -4,6 +4,7 @@
 - 연계: routers/ai.edit_image → edit_image; GcsService.upload_bytes로 결과 저장.
 - Java BE에서 이미지 편집 API 호출 시 /internal/ai/edit-image 사용.
 """
+import asyncio
 import base64
 import uuid
 import logging
@@ -11,7 +12,7 @@ import logging
 from google.genai import types as genai_types
 
 from app.core.config import get_settings
-from app.core.exceptions import GCSError
+from app.core.exceptions import GCSError, ValidationError
 from app.core.gemini_client import call_gemini, GeminiModel
 from app.schemas.image_edit import InternalImageEditRequest, InternalImageEditResponse
 from app.services.gcs_service import GcsService
@@ -27,7 +28,6 @@ async def edit_image(request: InternalImageEditRequest) -> InternalImageEditResp
     try:
         image_bytes = base64.b64decode(request.image_base64)
     except Exception as e:
-        from app.core.exceptions import ValidationError
         raise ValidationError(f"base64 디코딩 실패: {e}")
 
     contents = [
@@ -63,7 +63,9 @@ async def edit_image(request: InternalImageEditRequest) -> InternalImageEditResp
     if edited_image_bytes:
         blob_path = f"edited/{uuid.uuid4()}.jpg"
         try:
-            image_url = gcs.upload_bytes(blob_path, edited_image_bytes, content_type=edited_mime)
+            image_url = await asyncio.to_thread(
+                gcs.upload_bytes, blob_path, edited_image_bytes, edited_mime
+            )
         except Exception as e:
             raise GCSError(f"GCS 업로드 실패: {e}")
 

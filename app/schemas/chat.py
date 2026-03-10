@@ -5,7 +5,7 @@ AI 채팅 API용 Pydantic 스키마. Java BE ↔ FastAPI /internal/ai/chat 요�
 """
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 _CAMEL = ConfigDict(populate_by_name=True, alias_generator=to_camel, serialize_by_alias=True)
@@ -42,7 +42,7 @@ class InternalChatRequest(BaseModel):
     sticky_context: Optional[StickyContext] = None
     image_base64: Optional[str] = None
     image_mime_type: Optional[str] = None
-    history: Optional[List[HistoryItem]] = []
+    history: Optional[List[HistoryItem]] = Field(default_factory=list)
 
 
 class InternalChatResponse(BaseModel):
