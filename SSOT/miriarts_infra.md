@@ -143,7 +143,7 @@
 
 | 버킷명 | 용도 | 공개/비공개 | 소스(파일/라인) |
 |--------|------|-------------|------------------|
-| miriart-bucket | 작품(artworks), 편집(edited), 프로필(profiles), 커뮤니티(community) 이미지 | 비공개 (서비스 계정만) | docs/MiriArt_GCP_INFRA.md §3 |
+| miriart-bucket | 작품(artworks), 편집(edited), 프로필(profiles), 커뮤니티(community) 이미지 | 비공개 (서비스 계정만). CORS: GET, origin `https://miriart.app` + `http://localhost:3000` (2026-03-10 설정). Signed URL §3.4 참조 | docs/MiriArt_GCP_INFRA.md §3 |
 | miriart-build-cache | Cloud Build 캐시 | Cloud Build만 | 동일 |
 
 ### Secret Manager (주요 Secret ID)
@@ -276,6 +276,42 @@
 
 ---
 
+### 3.4 이미지 전달 정책 (GCS Signed URL)
+
+> **2026-03-10 신규**. 버킷 `miriart-bucket`은 비공개이며, 이미지 URL 직접 접근 시 403이 **정상**이다.
+
+| 항목 | 값 |
+|------|-----|
+| 전달 방식 | GCS V4 Signed URL (BE에서만 생성) |
+| BE 엔드포인트 | `GET /api/images/{id}/url` |
+| 서명 SA | `miriart-be-runner@miriarts.iam.gserviceaccount.com` |
+| 유효기간 | 15분 (dev/prod 동일) |
+| 허용 Method | GET (읽기 전용) |
+| 허용 경로 prefix | `artworks/`, `edited/`, `analyses/` |
+| CORS origin | `https://miriart.app`, `http://localhost:3000` |
+| CORS method | GET |
+| CORS maxAge | 3600s |
+
+**원칙**:
+- FE는 이미지 조회 시 반드시 BE(`/api/images/{id}/url`)를 통해 Signed URL을 발급받아 접근.
+- AI(`GcsService.upload_bytes`)가 반환하는 `https://storage.googleapis.com/...` URL은 BE 내부 식별/메타용. FE에 직접 전달하지 않음.
+- SA 키 파일 다운로드 금지. Cloud Run 자동 SA만 사용.
+
+**GCS 경로 패턴 (현재 코드 기준)**:
+
+| 경로 패턴 | 용도 | 생성 주체 | 소스 |
+|-----------|------|-----------|------|
+| `artworks/{date}/{uuid}_{filename}` | 원본 업로드 이미지 | BE | — |
+| `edited/{uuid}.jpg` | AI 이미지 편집 결과 | AI | `image_edit_service.py:64` |
+| `analyses/**` (향후) | 분석 결과 이미지 | AI | — |
+
+**GCS 경로 prefix 변경 프로세스**:
+1. AI/BE가 새 prefix를 도입할 경우, **코드 PR 전에** 이 SSOT §3.4 경로 표를 먼저 수정.
+2. BE의 Signed URL prefix 검증 허용 목록에 새 prefix 추가.
+3. PR 템플릿 체크: "☐ SSOT/miriarts_infra.md §3.4 경로 prefix 갱신 여부 확인"
+
+---
+
 ## 4. 네트워크 & 보안 (Networking & Security)
 
 **목적**: 네트워크 경로·인증/인가·CORS·서비스 계정을 정리해, 변경 시 기준선으로 사용할 수 있게 함.
@@ -312,13 +348,56 @@
 | miriart-ai | CORS 미들웨어 없음. BE만 호출 | — | miriart-ai/app/main.py |
 | server | **(현재 비활성 / future use)** origin: ALLOWED_ORIGIN \|\| '*', methods: GET, POST, OPTIONS, allowedHeaders: Content-Type, Authorization | ALLOWED_ORIGIN으로 제한 가능 | server/index.ts:23–27 |
 
+### 4.2.1 조직 정책 & Cloud Run IAM 현황 (2026-03-10 확인)
+
+**조직 정책 `iam.allowedPolicyMemberDomains`가 활성 상태**이며, `allUsers` / `allAuthenticatedUsers` IAM 바인딩이 프로젝트 `miriarts` 전체에서 차단되어 있다.
+
+이로 인해 Cloud Run 서비스에 `--allow-unauthenticated`(= `allUsers` Invoker)를 설정할 수 없다.
+
+#### 현재 상태 (DRS 완화 상태)
+
+| 서비스 | invoker-iam-check | invoker-iam-disabled | allUsers Invoker | 외부 접근 | 비고 |
+|--------|-------------------|----------------------|------------------|-----------|------|
+| **miriart-ai** | **활성** | false | ❌ (BE SA만) | 403 (정상) | BE→AI는 SA 토큰 자동 발급으로 정상 동작 |
+| **miriart-be** | 비활성 | **true (완화)** | ❌ (조직 차단) | 200 (완화) | FE(브라우저)→BE 호출을 위해 IAM 우회 유지. 앱 레벨 인증은 Spring Security JWT가 담당 |
+
+**⚠️ miriart-be의 `invoker-iam-disabled: true`는 보안 완화 상태이다.** BE는 FE(브라우저)에서 직접 호출하는 public 서비스이므로, 조직 정책이 `allUsers` 바인딩을 차단하는 한 이 완화가 불가피하다. 앱 레벨에서 Spring Security가 JWT·OAuth2로 인증/인가를 처리하므로, 비인증 요청은 Spring이 거부한다.
+
+#### 릴리즈 전 보안 강화 계획 (TODO-009)
+
+조직 정책 예외를 태그 기반으로 적용하여 `invoker-iam-disabled` 완화를 해소한다.
+
+**Step 1: 조직 태그 생성**
+
+| 항목 | 값 |
+|------|-----|
+| 태그 키 | `sa-api-key-policy` |
+| 설명 | 서비스 계정 API Key 생성 허용 정책 (조직 기본: 차단) |
+| 태그 값 | `enforced` (기본 차단) / `exempt` (예외 허용) |
+
+**Step 2: 조직 정책 조건부 적용**
+- 조직 루트: `iam.allowedPolicyMemberDomains` = `enforced` (기본)
+- `miriarts` 프로젝트에 태그 `sa-api-key-policy=exempt` 부착
+- 조건부 정책: 해당 태그가 있는 프로젝트만 `allUsers` 바인딩 허용
+
+**Step 3: BE IAM 정상화**
+```bash
+gcloud run services update miriart-be \
+  --region=asia-northeast3 --project=miriarts \
+  --allow-unauthenticated --invoker-iam-check
+```
+
+**실행 시점**: v1 릴리즈 직전 보안 점검 시. 조직 관리자 권한 필요.
+
+---
+
 ### 4.3 서비스 계정 & IAM
 
 *소스: docs/MiriArt_GCP_INFRA.md §2. 구체 리소스 정책은 문서 범위 내.*
 
 | 서비스 계정 | 용도 | 역할 (문서 기준) |
 |-------------|------|-------------------|
-| miriart-be-runner | BE Cloud Run 런타임 | roles/storage.objectAdmin, roles/run.invoker, roles/cloudsql.client, roles/secretmanager.secretAccessor |
+| miriart-be-runner | BE Cloud Run 런타임 | roles/storage.objectAdmin, roles/run.invoker, roles/cloudsql.client, roles/secretmanager.secretAccessor, **roles/iam.serviceAccountTokenCreator** (GCS Signed URL 서명, 2026-03-10 추가) |
 | miriart-ai-runner | AI Cloud Run 런타임 | roles/aiplatform.user, roles/storage.objectAdmin, **roles/iam.serviceAccountTokenCreator** (Signed URL 준비, 2026-03-10 추가) |
 | miriart-cloudbuild | CI/CD 파이프라인 | roles/run.admin, roles/iam.serviceAccountUser, roles/artifactregistry.writer, roles/storage.objectAdmin |
 | miriart-local-dev | 로컬 개발(키파일) | roles/aiplatform.user, roles/storage.objectAdmin |
@@ -444,10 +523,10 @@ MySQL `chat_sessions` / `chat_messages` 테이블·엔티티는 **없음**. 채�
 | Cloud Logging / Monitoring / Trace | 전용 설정·SDK 없음. Spring Cloud GCP는 storage만 사용. **(추론: 기본 로그 수준만 사용)** | miriart-be/build.gradle |
 | BE 예외 로깅 | GlobalExceptionHandler: 예외 유형별 log.error. 미처리 예외는 `log.error("Unhandled Exception: ", e)` (스택 포함). request/response body·헤더 직접 로깅 없음 | miriart-be/.../GlobalExceptionHandler.java:36–102, AiProxyService.java:71, 110 |
 | AI/server | FastAPI lifespan 경고, server console.error. body/헤더 로깅 없음 | miriart-ai/app/main.py:24, server/index.ts:46–48 |
-| Log-based Metrics | miriart-ai-5xx-errors, miriart-ai-502-gateway, miriart-ai-504-timeout, miriart-be-5xx-errors (2026-03-10 생성) | GCP Logging > Log-based Metrics |
-| Monitoring Dashboard | "MiriArt-AI BE/AI Overview" — AI/BE Request Count, Latency, 5xx Rate, Instance Count 7패널 (2026-03-10 생성) | GCP Monitoring > Dashboards |
-| Alert Policy | "miriart-ai 5xx Spike": 5분간 5xx > 5건 시 CTO 이메일 알림 (2026-03-10 생성) | GCP Monitoring > Alerting |
-| 알람/대시보드 | 대시보드·메트릭·알림 기초 구축 완료. TODO-006 완료. | — |
+| Log-based Metrics | miriart-ai-5xx-errors, miriart-ai-502-gateway, miriart-ai-504-timeout, miriart-be-5xx-errors, **miriart-be-signed-url-count**, **miriart-be-signed-url-errors** (2026-03-10 생성) | GCP Logging > Log-based Metrics |
+| Monitoring Dashboard | (1) "MiriArt-AI BE/AI Overview" — AI/BE Request Count, Latency, 5xx Rate, Instance Count 7패널. (2) **"MiriArt - BE Signed URL"** — Signed URL 발급/에러/Top objectPath 3위젯 (2026-03-10 생성) | GCP Monitoring > Dashboards |
+| Alert Policy | (1) "miriart-ai 5xx Spike": 5분간 5xx > 5건 시 CTO 이메일 알림. (2) **"Signed URL Errors Spike"**: `signed_url_errors > 0` 5분 지속 시 CTO 알림 (2026-03-10 생성) | GCP Monitoring > Alerting |
+| 알람/대시보드 | 대시보드·메트릭·알림 기초 구축 완료. Signed URL 전용 대시보드·알람 추가 완료. TODO-006 완료. | — |
 
 ---
 
@@ -467,6 +546,7 @@ MySQL `chat_sessions` / `chat_messages` 테이블·엔티티는 **없음**. 채�
 | TODO-006 | 관측성(알람·대시보드) 미구축 | Medium | Cloud Monitoring 알람/대시보드 없음. 기본 로그만 사용. 별도 설계 필요 |
 | TODO-007 | BE Cloud Run 신뢰성 파라미터 미명시 | Medium | 타임아웃, 동시성, min/max 인스턴스가 문서·배포 스크립트에 명시되어 있지 않음. Cloud Run 기본값 의존 |
 | TODO-008 | 성적/입시 전용 API 미구현 | Low | /api/theory, /api/universities, /api/line 컨트롤러·전용 서비스 없음. 분석·유저 도메인 필드(grade, universityPredictions)로만 노출. §4.4 |
+| TODO-009 | BE Cloud Run IAM 정상화 (invoker-iam-disabled 해소) | **High** | 조직 정책 `iam.allowedPolicyMemberDomains`가 `allUsers` 바인딩 차단 → BE `invoker-iam-disabled: true` 완화 유지 중. **릴리즈 전 보안 점검 시** 조직 태그(`sa-api-key-policy=exempt`) 기반 예외 적용 후 `--allow-unauthenticated --invoker-iam-check` 전환. 상세: §4.2.1 |
 
 ---
 
