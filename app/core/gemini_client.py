@@ -17,6 +17,10 @@ from app.core.exceptions import LLMServiceError, LLMTimeoutError
 
 logger = logging.getLogger(__name__)
 
+# [DEBUG] SDK 내부 HTTP 호출 추적 — 배포 후 로그 확인 완료 시 제거
+logging.getLogger("google.genai").setLevel(logging.DEBUG)
+logging.getLogger("httpx").setLevel(logging.DEBUG)
+
 _client: Optional[genai.Client] = None
 
 
@@ -30,9 +34,9 @@ def get_genai_client() -> genai.Client:
             project=settings.gcp_project_id,
             location=settings.gcp_region,
             http_options=types.HttpOptions(
-                timeout=28 * 1000,  # 28s (BE 30s - 2s margin)
+                timeout=55 * 1000,  # 55s (BE 60s - 5s margin)
                 retry_options=types.HttpRetryOptions(
-                    attempts=3,
+                    attempts=2,  # 429 등 일시적 에러 시 1회 재시도. AFC 비활성화로 호출 수 제어됨
                     initial_delay=1.0,
                     max_delay=8.0,
                     exp_base=2.0,
@@ -77,15 +81,39 @@ async def call_gemini(
     - return_response=True 시 raw response 객체 반환 (image-edit 등에서 사용)
     """
     client = get_genai_client()
-    effective_timeout = timeout_override_s or 28
+    effective_timeout = timeout_override_s or 55
 
     config = types.GenerateContentConfig(
         temperature=temperature,
         max_output_tokens=max_output_tokens,
         system_instruction=system_instruction,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
     if response_mime_type:
         config.response_mime_type = response_mime_type
+
+    # [DEBUG] 호출 직전 상태 로그 — H1~H6 가설 검증용
+    content_types = []
+    if isinstance(contents, list):
+        for c in contents:
+            ctype = type(c).__name__
+            if hasattr(c, "mime_type"):
+                ctype += f"({c.mime_type})"
+            content_types.append(ctype)
+    logger.info(
+        "gemini_call_start",
+        extra={
+            "purpose": purpose,
+            "model": model,
+            "effective_timeout_s": effective_timeout,
+            "content_parts": content_types,
+            "has_image": any("image" in str(c) for c in content_types),
+            "response_mime_type": response_mime_type,
+            "afc_disabled": True,
+            "sdk_attempts": 2,
+            "sdk_timeout_ms": 55000,
+        },
+    )
 
     start = time.monotonic()
     try:
@@ -146,13 +174,21 @@ async def call_gemini(
 
     except Exception as e:
         latency = time.monotonic() - start
+        # [DEBUG] 에러 상세 분류 — 429 vs 5xx vs 기타
+        err_str = str(e)
+        is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
+        is_quota = "quota" in err_str.lower() or "rate" in err_str.lower()
         logger.error(
             "gemini_call_error",
             extra={
                 "purpose": purpose,
                 "model": model,
-                "error": str(e),
+                "error": err_str[:500],
+                "error_type": type(e).__name__,
+                "is_429": is_429,
+                "is_quota_related": is_quota,
                 "latency_s": round(latency, 2),
+                "effective_timeout_s": effective_timeout,
             },
             exc_info=True,
         )

@@ -75,12 +75,26 @@ async def analyze_artwork(req: InternalAnalyzeRequest) -> InternalAnalyzeRespons
     """GCS URI 이미지 다운로드 → Gemini Vision 호출 → JSON 파싱 → InternalAnalyzeResponse 반환.
     현재는 동일 버킷(settings.gcs_bucket_name) URI만 정상 지원; 그 외는 GCS 실패 시 GCSError(502).
     """
+    # [DEBUG] GCS 다운로드 단계
+    gcs_start = asyncio.get_event_loop().time()
     try:
         image_bytes = await asyncio.to_thread(gcs.download_as_bytes, req.gcs_uri)
     except Exception as e:
         raise GCSError(f"Failed to download image from {req.gcs_uri}: {e}")
+    gcs_latency = asyncio.get_event_loop().time() - gcs_start
 
     mime_type = _detect_mime(image_bytes)
+    logger.info(
+        "analyze_pre_gemini",
+        extra={
+            "gcs_uri": req.gcs_uri,
+            "gcs_download_s": round(gcs_latency, 2),
+            "image_bytes": len(image_bytes),
+            "mime_type": mime_type,
+            "analysis_type": req.analysis_type,
+            "has_problem_text": bool(req.problem_text),
+        },
+    )
 
     problem_line = f"문제/주제: {req.problem_text}" if req.problem_text else ""
     user_text = ANALYZE_USER_TEMPLATE.format(
