@@ -89,7 +89,7 @@ async def draft_from_question(
         except Exception as e:
             raise ValidationError(f"imageBase64 디코딩 실패: {e}")
         contents = [
-            genai_types.Part.from_text(user_prompt),
+            genai_types.Part.from_text(text=user_prompt),
             genai_types.Part.from_bytes(
                 data=decoded,
                 mime_type="image/jpeg",

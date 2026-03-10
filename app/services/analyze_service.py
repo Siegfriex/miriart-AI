@@ -89,7 +89,7 @@ async def analyze_artwork(req: InternalAnalyzeRequest) -> InternalAnalyzeRespons
     )
 
     contents = [
-        genai_types.Part.from_text(user_text),
+        genai_types.Part.from_text(text=user_text),
         genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
     ]
 

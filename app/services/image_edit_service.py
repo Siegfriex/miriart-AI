@@ -32,7 +32,7 @@ async def edit_image(request: InternalImageEditRequest) -> InternalImageEditResp
 
     contents = [
         genai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-        genai_types.Part.from_text(request.prompt),
+        genai_types.Part.from_text(text=request.prompt),
     ]
 
     response = await call_gemini(
@@ -41,7 +41,7 @@ async def edit_image(request: InternalImageEditRequest) -> InternalImageEditResp
         purpose="image_edit",
         temperature=0.4,
         max_output_tokens=2048,
-        timeout_override_s=55,
+        timeout_override_s=25,
         return_response=True,
     )
 

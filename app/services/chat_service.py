@@ -72,7 +72,7 @@ async def chat(req: InternalChatRequest) -> InternalChatResponse:
             raise ValidationError(f"imageBase64 디코딩 실패: {e}")
         mime = req.image_mime_type or "image/jpeg"
         contents = [
-            genai_types.Part.from_text(messages),
+            genai_types.Part.from_text(text=messages),
             genai_types.Part.from_bytes(data=image_bytes, mime_type=mime),
         ]
     else:
