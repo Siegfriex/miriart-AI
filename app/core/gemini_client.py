@@ -17,6 +17,14 @@ from app.core.exceptions import LLMRateLimitError, LLMServiceError, LLMTimeoutEr
 
 logger = logging.getLogger(__name__)
 
+# ── Gemini 공통 상수 (SSOT) ──────────────────────────────
+GEMINI_TIMEOUT_S = 55                # BE 65s - 10s margin
+GEMINI_TIMEOUT_MS = GEMINI_TIMEOUT_S * 1000
+GEMINI_RETRY_ATTEMPTS = 3           # 초회 + 재시도 2회, SDK timeout 내 완료
+GEMINI_RETRY_INITIAL_DELAY = 1.0
+GEMINI_RETRY_MAX_DELAY = 8.0
+GEMINI_IMAGE_EDIT_TIMEOUT_S = 25
+# ─────────────────────────────────────────────────────────
 
 _client: Optional[genai.Client] = None
 
@@ -31,11 +39,11 @@ def get_genai_client() -> genai.Client:
             project=settings.gcp_project_id,
             location=settings.gemini_location,  # Cloud Run 리전(gcp_region)과 분리
             http_options=types.HttpOptions(
-                timeout=55 * 1000,  # 55s (BE 60s - 5s margin)
+                timeout=GEMINI_TIMEOUT_MS,
                 retry_options=types.HttpRetryOptions(
-                    attempts=3,  # 429 등 일시적 에러 시 2회 재시도 (SDK 55s 내에서 완료)
-                    initial_delay=1.0,
-                    max_delay=8.0,
+                    attempts=GEMINI_RETRY_ATTEMPTS,
+                    initial_delay=GEMINI_RETRY_INITIAL_DELAY,
+                    max_delay=GEMINI_RETRY_MAX_DELAY,
                     exp_base=2.0,
                     jitter=0.5,
                     http_status_codes=[429, 500, 502, 503, 504],
@@ -79,7 +87,7 @@ async def call_gemini(
     - return_response=True 시 raw response 객체 반환 (image-edit 등에서 사용)
     """
     client = get_genai_client()
-    effective_timeout = timeout_override_s or 55
+    effective_timeout = timeout_override_s or GEMINI_TIMEOUT_S
 
     config = types.GenerateContentConfig(
         temperature=temperature,
@@ -108,8 +116,8 @@ async def call_gemini(
             "has_image": any("image" in str(c) for c in content_types),
             "response_mime_type": response_mime_type,
             "afc_disabled": True,
-            "sdk_attempts": 3,
-            "sdk_timeout_ms": 55000,
+            "sdk_attempts": GEMINI_RETRY_ATTEMPTS,
+            "sdk_timeout_ms": GEMINI_TIMEOUT_MS,
         },
     )
 

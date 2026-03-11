@@ -13,7 +13,7 @@ from google.genai import types as genai_types
 
 from app.core.config import get_settings
 from app.core.exceptions import GCSError, ValidationError
-from app.core.gemini_client import call_gemini, GeminiModel
+from app.core.gemini_client import call_gemini, GeminiModel, GEMINI_IMAGE_EDIT_TIMEOUT_S
 from app.schemas.image_edit import InternalImageEditRequest, InternalImageEditResponse
 from app.services.gcs_service import GcsService
 
@@ -41,7 +41,7 @@ async def edit_image(request: InternalImageEditRequest) -> InternalImageEditResp
         purpose="image_edit",
         temperature=0.4,
         max_output_tokens=2048,
-        timeout_override_s=25,
+        timeout_override_s=GEMINI_IMAGE_EDIT_TIMEOUT_S,
         return_response=True,
     )
 

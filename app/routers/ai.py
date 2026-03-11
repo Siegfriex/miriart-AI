@@ -19,6 +19,31 @@ from app.services import analyze_service, chat_service, image_edit_service, qa_s
 router = APIRouter()
 
 
+@router.get("/status", summary="AI 서비스 상태")
+async def status():
+    """GenAI client 초기화 여부 + 설정값 리포트. 배포 직후 정합성 확인용."""
+    from app.core.gemini_client import (
+        _client, GeminiModel,
+        GEMINI_TIMEOUT_S, GEMINI_RETRY_ATTEMPTS, GEMINI_IMAGE_EDIT_TIMEOUT_S,
+    )
+    from app.core.config import get_settings
+    s = get_settings()
+    return {
+        "genai_initialized": _client is not None,
+        "project": s.gcp_project_id,
+        "region": s.gcp_region,
+        "gemini_location": s.gemini_location,
+        "models": {
+            "flash": GeminiModel.FLASH,
+            "pro": GeminiModel.PRO,
+            "flash_lite": GeminiModel.FLASH_LITE,
+        },
+        "timeout_s": GEMINI_TIMEOUT_S,
+        "retry_attempts": GEMINI_RETRY_ATTEMPTS,
+        "image_edit_timeout_s": GEMINI_IMAGE_EDIT_TIMEOUT_S,
+    }
+
+
 @router.post(
     "/analyze",
     response_model=InternalAnalyzeResponse,
