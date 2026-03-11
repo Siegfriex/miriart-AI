@@ -16,7 +16,7 @@
 | 3 | POST | `/internal/ai/edit-image` | `edit_image` | `InternalImageEditRequest` | `InternalImageEditResponse` | `image_edit_service.edit_image()` | AI 이미지 편집 |
 | 4 | POST | `/internal/ai/summarize-answers` | `summarize_answers` | `SummarizeAnswersRequest` | `SummarizeAnswersResponse` | `qa_service.summarize_answers()` | QA 답변 요약 |
 | 5 | POST | `/internal/ai/draft-from-question` | `draft_from_question` | `DraftFromQuestionRequest` | `DraftFromQuestionResponse` | `qa_service.draft_from_question()` | QA 답변 초안 |
-| 6 | GET | `/health` | `health_check` | — | `{"status": "ok"}` | — | 헬스체크 |
+| 6 | GET | `/health` | `health` | — | `{"status": "ok"}` | — | 헬스체크 |
 
 > 모든 `/internal/ai/*` 엔드포인트는 Cloud Run IAM으로 보호. BE SA(`miriart-be-runner`)만 호출 가능.
 
@@ -159,7 +159,7 @@
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| `draft` | `str` | AI 초안 답변 (200자 이내) |
+| `draft` | `str` | AI 초안 답변 (프롬프트에서 200자 유도, 응답 스키마에는 길이 제한 없음) |
 
 ---
 
@@ -220,14 +220,14 @@ gcs = GcsService(bucket_name=_settings.gcs_bucket_name, project_id=_settings.gcp
 ```json
 {
   "code": "LLM_TIMEOUT",
-  "detail": "Gemini 응답 시간 초과 (28s)"
+  "message": "Gemini 응답 시간 초과 (55s)"
 }
 ```
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `code` | str | 머신 리더블 에러 코드 |
-| `detail` | str | 사람 리더블 에러 메시지 |
+| `message` | str | 사람 리더블 에러 메시지 |
 
 ### 에러 코드 전체 목록
 
@@ -238,6 +238,7 @@ gcs = GcsService(bucket_name=_settings.gcs_bucket_name, project_id=_settings.gcp
 | `LLM_PARSING_ERROR` | 502 | `LLMParsingError` | analyze, qa (JSON 응답) |
 | `GCS_ERROR` | 502 | `GCSError` | analyze (다운로드), edit-image (업로드) |
 | `VALIDATION_ERROR` | 400 | `ValidationError` / `RequestValidationError` | chat, edit-image, qa (base64/Pydantic) |
+| `LLM_RATE_LIMITED` | 429 | `LLMRateLimitError` | analyze, chat, edit-image, qa (Gemini 429 시) |
 | `INTERNAL_ERROR` | 500 | `Exception` (미처리) | 전역 |
 
 ---

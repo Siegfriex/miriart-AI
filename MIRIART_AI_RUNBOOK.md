@@ -30,6 +30,7 @@
 |--------|------|------|------|
 | `http_request` | INFO | `request_id`, `method`, `path`, `status`, `latency_s` | 모든 HTTP 요청 (제외: `/health`, `/internal/ai/health`) |
 
+- 라우트는 `/health`만 정의됨 (main.py). `/internal/ai/health`는 미들웨어 제외 경로로만 등록되어 있으며 해당 경로 라우트는 없음.
 - `X-Request-ID`: 요청 헤더에서 추출 또는 12자 UUID 자동 생성, 응답 헤더에 반환
 
 #### Gemini LLM 호출 로그
@@ -38,8 +39,10 @@
 
 | 이벤트 | 레벨 | 필드 | 설명 |
 |--------|------|------|------|
+| `gemini_call_start` | INFO | `purpose`, `model` | 호출 시작 |
 | `gemini_call_success` | INFO | `purpose`, `model`, `latency_s`, `output_len` | LLM 호출 성공 |
 | `gemini_call_timeout` | WARNING | `purpose`, `model`, `timeout_s`, `latency_s` | LLM 타임아웃 |
+| `gemini_call_rate_limited` | WARNING | `purpose`, `model`, `latency_s` | Gemini 429 |
 | `gemini_call_error` | ERROR | `purpose`, `model`, `error`, `latency_s` | LLM 호출 실패 |
 
 `purpose` 값: `"analyze_artwork"`, `"chat"`, `"image_edit"`, `"summarize_answers"`, `"draft_from_question"`
@@ -117,6 +120,7 @@ gcloud logging read \
 ```
 MiriArtAIError (base)
 ├── LLMTimeoutError      error_code="LLM_TIMEOUT"
+├── LLMRateLimitError    error_code="LLM_RATE_LIMITED"
 ├── LLMServiceError      error_code="LLM_SERVICE_ERROR"
 ├── LLMParsingError      error_code="LLM_PARSING_ERROR"
 ├── GCSError             error_code="GCS_ERROR"
@@ -127,22 +131,23 @@ MiriArtAIError (base)
 
 소스: `app/core/error_handler.py`
 
-| 예외 클래스 | HTTP Status | body.code | body.detail | 로그 이벤트 |
-|------------|------------|-----------|-------------|------------|
+| 예외 클래스 | HTTP Status | body.code | body.message | 로그 이벤트 |
+|------------|------------|-----------|--------------|------------|
 | `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | 예외 메시지 | `handled_error` (WARNING) |
+| `LLMRateLimitError` | 429 | `LLM_RATE_LIMITED` | 예외 메시지 | `handled_error` (WARNING) |
 | `LLMServiceError` | 502 | `LLM_SERVICE_ERROR` | 예외 메시지 | `handled_error` (WARNING) |
 | `LLMParsingError` | 502 | `LLM_PARSING_ERROR` | 예외 메시지 | `handled_error` (WARNING) |
 | `GCSError` | 502 | `GCS_ERROR` | 예외 메시지 | `handled_error` (WARNING) |
 | `ValidationError` | 400 | `VALIDATION_ERROR` | 예외 메시지 | `handled_error` (WARNING) |
 | `RequestValidationError` | 400 | `VALIDATION_ERROR` | Pydantic 에러 목록 | `request_validation_error` (WARNING) |
-| `Exception` (기타) | 500 | `INTERNAL_ERROR` | `"내부 서버 오류가 발생했습니다"` | `unhandled_exception` (ERROR) |
+| `Exception` (기타) | 500 | `INTERNAL_ERROR` | `"Internal server error"` | `unhandled_exception` (ERROR) |
 
 ### 2.3 에러 응답 형식
 
 ```json
 {
   "code": "LLM_TIMEOUT",
-  "detail": "Gemini 응답 시간 초과 (28s)"
+  "message": "Gemini 응답 시간 초과 (55s)"
 }
 ```
 
@@ -153,6 +158,7 @@ BE가 AI 응답의 HTTP status와 `code`를 보고 자체 ErrorCode로 변환:
 | AI code | AI HTTP | → BE ErrorCode | BE HTTP | 비고 |
 |---------|---------|----------------|---------|------|
 | `LLM_TIMEOUT` | 504 | AN002 / AI002 | 504 | 분석/채팅 |
+| `LLM_RATE_LIMITED` | 429 | (BE 매핑 정책에 따라) | 429 | 리트라이 유도 |
 | `LLM_SERVICE_ERROR` | 502 | AN001 / AI001 | 502 | |
 | `LLM_PARSING_ERROR` | 502 | AN001 / AI001 | 502 | |
 | `GCS_ERROR` | 502 | F003 | 502 | 파일 IO |
@@ -218,8 +224,9 @@ AI 서비스 문제 발생 시 확인 순서:
 
 | 이름 | 용도 | 기본값 | Prod 값 출처 | 민감도 |
 |------|------|--------|-------------|--------|
-| `GCP_PROJECT_ID` | Vertex AI / GCS 프로젝트 ID | `miriart-dev` | Cloud Run env (`cloudbuild.yaml:32`) | 낮음 |
-| `GCP_REGION` | Vertex AI 리전 | `asia-northeast3` | Cloud Run env | 낮음 |
+| `GCP_PROJECT_ID` | Vertex AI / GCS 프로젝트 ID | `miriart-dev` | Cloud Run env (`cloudbuild.yaml:40`): **miriarts** | 낮음 |
+| `GCP_REGION` | Cloud Run / 설정 리전 | `asia-northeast3` | Cloud Run env | 낮음 |
+| `GEMINI_LOCATION` | Gemini API 호출 리전 (Cloud Run 리전과 분리) | `global` | cloudbuild 미설정 시 기본값 사용 (config.py:26) | 낮음 |
 | `GCS_BUCKET_NAME` | GCS 버킷명 | `miriart-bucket` | Cloud Run env | 낮음 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | 로컬 개발 SA 키 경로 | `""` (빈 문자열) | Cloud Run: 불필요 (SA 자동 토큰) | **높음** (로컬만) |
 
@@ -431,9 +438,9 @@ gcloud logging read \
 
 | 항목 | 값 |
 |------|-----|
-| 기본 타임아웃 | 28s (BE 30s timeout - 2s 마진) |
-| `timeout_override_s` | 이미지 편집: 55s |
-| 리트라이 횟수 | 3 |
+| 기본 타임아웃 | 55s |
+| `timeout_override_s` | 이미지 편집: 25s |
+| 리트라이 횟수 | 2 |
 | 초기 딜레이 | 1.0s |
 | 최대 딜레이 | 8.0s |
 | 지수 베이스 | 2.0 |
@@ -453,6 +460,7 @@ call_gemini()
   │         return_response=True 시 raw response 반환
   │
   ├─ TimeoutError → LLMTimeoutError
+  ├─ 429 (Gemini) → LLMRateLimitError → HTTP 429
   └─ Exception → LLMServiceError
 ```
 

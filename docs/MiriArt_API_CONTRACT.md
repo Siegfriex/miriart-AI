@@ -543,9 +543,9 @@
 
 | 메서드 | 경로 | 용도 | FastAPI 에러 | 소스(파일/라인) |
 |--------|------|------|--------------|------------------|
-| POST | /internal/ai/analyze | 작품 5축 분석 | 400 GCS URI 파싱 실패, 502 GCS/ Gemini/파싱 실패 | ai.py:19-27, analyze_service.py:108-140 |
-| POST | /internal/ai/chat | AI 멘토 채팅 | 502 Gemini 호출 실패 | ai.py:30-38, chat_service.py |
-| POST | /internal/ai/edit-image | 이미지 편집 | (서비스 구현에 따름) | ai.py:41-48, image_edit.py |
+| POST | /internal/ai/analyze | 작품 5축 분석 | 400 GCS URI 파싱 실패, 502 GCS/Gemini/파싱 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | ai.py, analyze_service.py |
+| POST | /internal/ai/chat | AI 멘토 채팅 | 502 Gemini 호출 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | ai.py, chat_service.py |
+| POST | /internal/ai/edit-image | 이미지 편집 | 502/504(25s)/429 LLM_RATE_LIMITED 등 | ai.py, image_edit_service.py |
 | POST | /internal/ai/summarize-answers | Q&A 요약 | **501** Phase C4 스텁 | ai.py:51-63 |
 | POST | /internal/ai/draft-from-question | 질문 초안 | **501** Phase C4 스텁 | ai.py:65-76 |
 | GET | /health | 헬스체크 | — | main.py:37-41 |
@@ -654,6 +654,8 @@
 | `AI001` | 502 | AI 멘토 연결에 실패했습니다. 다시 시도해주세요 | ErrorCode.java:59 |
 | `AI002` | 504 | AI 응답 시간이 초과됐습니다 | ErrorCode.java:60 |
 
+> AI 서비스가 Gemini 429 시 **429 LLM_RATE_LIMITED** 를 반환. BE는 429 수신 시 재시도 유도 등 정책에 따라 매핑.
+
 ### 9.8 Community (MiriArt 신규, Phase C)
 
 | 코드 | HTTP | 메시지 | 소스(파일/라인) |
@@ -670,7 +672,7 @@
 
 ## 10. 코드 기준 검증 (예외 I-P-O-E, CORS, 엔드포인트)
 
-> **목적**: BE 예외 처리·CORS·공개 경로를 실 코드 라인으로 교차검증. SSOT: `docs/SSOT/miriarts_infra.md` + 코드베이스.
+> **목적**: BE 예외 처리·CORS·공개 경로를 실 코드 라인으로 교차검증. SSOT: `SSOT/miriarts_infra.md` + 코드베이스. (miriart-ai 레포에서는 루트 기준 SSOT/)
 
 ### 10.1 예외 처리 I-P-O-E (Input → Process → Output / Exception)
 

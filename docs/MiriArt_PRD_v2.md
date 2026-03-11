@@ -2,7 +2,7 @@
 
 > **목적**: Legacy PRD v1.1 갭 메우기 + 현 구현 상태 반영 + 커뮤니티 비전 통합
 > **버전**: 2.2 | **작성일**: 2026-02-22 | **최종 수정**: 2026-03-02
-> **검증 기준선**: `docs/SSOT/miriarts_infra.md` + 코드베이스 (문서 정합성 검증일: 2026-03-02)
+> **검증 기준선**: `SSOT/miriarts_infra.md` (레포 루트 기준. miriart-ai 레포) + 코드베이스 (문서 정합성 검증일: 2026-03-02)
 > **기반**: Legacy PRD v1.1, `MiriArt_FSD_v2.md`, `MiriArt_ERD_v2.md`, Community Design v1.0, FE Disassembly Report v1.0
 
 ---
@@ -122,7 +122,7 @@
 
 ### 4.1 현 구현 갭 분석 (코드·인프라 SSOT 기준)
 
-> **SSOT**: `docs/SSOT/miriarts_infra.md` + 코드베이스. 판단은 코드 우선.
+> **SSOT**: `SSOT/miriarts_infra.md` + 코드베이스. 판단은 코드 우선.
 
 | 기능 | Legacy PRD 명세 | 현 구현 상태 (코드 기준) | 상태 |
 |------|-----------------|--------------------------|------|
@@ -135,6 +135,7 @@
 | 구독 결제 (F7) | F7 | 플랜 조회만. 결제 연동 없음 | 결제 미구현 |
 | 합격 확률 (Layer 2) | F4 Layer 2 | analyses·university_predictions 필드 존재. 전용 Theory API 없음 | **미구현** (필드만 존재) |
 | 커뮤니티 (C1) | 신규 | GET /api/posts 구현 (PostController). POST /api/posts, /api/answers, comments CRUD 없음 | **C1 일부 구현**, 나머지 **미구현(향후)** |
+| AI 연결 요약/초안 (C4) | FastAPI 구현 | POST /internal/ai/summarize-answers, /internal/ai/draft-from-question (ai.py, qa_service). BE/FE 노출 Phase C 정책 | **FastAPI 구현 완료** |
 
 ### 4.2 핵심 엔티티 요약
 
@@ -241,4 +242,4 @@
 | Cariv→MiriArt 패턴 전략 | - | `docs/Cariv→MiriArt 패턴 재사용 전략.md` |
 | VID v1.1 | 1.1 | `docs/VID_v1.0.md` |
 | Legacy PRD | 1.1 | `docs/legacy/dysprime_PRD_v1.md` |
-| PRD 업데이트·정합성 가이드 | - | `docs/PRD_업데이트_및_문서_정합성_가이드.md` |
+| PRD·FSD 정합성·갱신 규칙 | - | 문서 정합성·갱신 규칙은 **docs/CODE_VS_DOCS_GAP_REPORT.md** §PRD·FSD 갱신 규칙 및 §9 체크리스트 참조 |

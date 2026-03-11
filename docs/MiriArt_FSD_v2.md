@@ -25,7 +25,7 @@
 | C1 | 커뮤니티 피드 CRUD | **C1** | - | `GET/POST /api/posts`, answers·comments API | **일부 구현됨**(GET /api/posts만), 나머지 **미구현(향후)** |
 | C2 | Q&A 채택 + 마감 자동화 | **C2** | - | `POST /api/posts/{id}/accept/{answerId}` | **미구현(향후)** |
 | C3 | 평판 시스템 | **C3** | - | `ApplicationEvent` | **미구현(향후)** |
-| C4 | AI 연결 (요약/초안) | **C4** | - | `/internal/ai/summarize-answers` | **미구현(향후)** |
+| C4 | AI 연결 (요약/초안) | **C4** | - | `/internal/ai/summarize-answers`, `/internal/ai/draft-from-question` | **구현됨 (FastAPI)**. BE/FE 공개 노출은 Phase C 정책에 따름 |
 
 **참조**: 구현·엔드포인트·CORS — miriarts_infra §4.2·§4.4. 예외·ErrorCode·FastAPI 명세 — API_CONTRACT §9·§10·§8. 상세 — PRD §4.1, `MiriArt_레포_전제_코드문서_정의_정리.md`.
 
@@ -167,6 +167,8 @@ needsProfile === false → /app/home
 | **Output** | 202 Accepted. body `AnalysisStartResponse`: analysisId(String.valueOf(analysis.getId())), status(analysis.getStatus().name()), message(고정 "분석 중입니다. 약 8초 소요됩니다.") | `AnalysisController.java:49` `ResponseEntity.accepted().body(ApiResponse.success(result))`; `AnalysisStartResponse.java:22-27` from() |
 | **Exception** | F001(64-66), CR001(73-75), F003(50-53 컨트롤러 catch IOException→FILE_UPLOAD_FAILED), AN001/AN002(AiProxyService 62-73) | `AnalysisService.java:64-66, 73-75`; `AnalysisController.java:50-53`; `ErrorCode.java:45,54,47,50-51` |
 
+AI 504/429 반환 시 BE AN002 등 매핑. 상세는 API_CONTRACT §8·§9.
+
 **현 FE 연결**: UploadFlow → POST /api/analyses (Authorization 헤더)
 
 **FE 에러 처리 매핑** (AN002 = 504):
@@ -191,7 +193,7 @@ needsProfile === false → /app/home
 | **Input** | `POST /api/chat` body `ChatRequest`: message(@NotBlank), modelType(기본 "CHAT_PRO"), sessionId, stickyContext, imageBase64, imageMimeType, history | `AiChatController.java:37-42` — `@PostMapping`, `@RequestBody @Valid ChatRequest request`; `ChatRequest.java:22-30` 필드 |
 | **Process** | 1. sessionId 없으면 UUID 생성 2. `InternalChatRequest.builder()` (modelType, message, stickyContext, history, imageBase64, imageMimeType) 3. `fastapiWebClient.post().uri("/internal/ai/chat").bodyValue(internalRequest)` 4. 5xx→AI_CHAT_FAILED, Timeout→AI_CHAT_TIMEOUT 5. 응답 수신 후 `updateSessionHistory(sessionId, chatRequest, response)` — Redis에 `[{"role":"user","text":...},{"role":"model","text":...}]` JSON 저장 6. `ChatResponse.builder()` 반환. **플랜/CR002 검사 없음** | `AiProxyService.java:83-126` chat(). 85-87 sessionId, 88-96 InternalChatRequest, 97-114 WebClient, 116-119 updateSessionHistory, 121-125 build. `AiProxyService.java:133-156` updateSessionHistory() |
 | **Output** | `ChatResponse`: text, groundingUrls, quickReplies, sessionId | `AiProxyService.java:121-125` builder; `ChatResponse.java:19-23` 필드. `AiChatController.java:42` `ApiResponse.success(response)` |
-| **Exception** | AI_CHAT_FAILED(5xx), AI_CHAT_TIMEOUT(30초). CR002 채팅 경로 미사용 | `AiProxyService.java:102-104, 106-107, 110-113`; `ErrorCode.java:59-60` |
+| **Exception** | AI_CHAT_FAILED(5xx), AI_CHAT_TIMEOUT(30초). 429(LLM_RATE_LIMITED) 시 BE 매핑은 API_CONTRACT §9.7 참조. CR002 채팅 경로 미사용 | `AiProxyService.java:102-104, 106-107, 110-113`; `ErrorCode.java:59-60` |
 
 **Phase 1 세션 데이터 구조** (Redis value = history 배열만; 키 `miriart:chat:session:{sessionId}`, TTL 72h):
 ```json
@@ -313,7 +315,7 @@ needsProfile === false → /app/home
 
 ### C4: AI 연결 (Q&A 요약/초안)
 
-**구현 상태**: **미구현(향후)**. FastAPI에는 `/internal/ai/summarize-answers`, `/internal/ai/draft-from-question` 스텁(501)만 존재. *miriart-ai/app/routers/ai.py:51-76*. **PRD §5.1 Phase C** 참조.
+**구현 상태**: **구현됨 (FastAPI)**. `POST /internal/ai/summarize-answers`, `POST /internal/ai/draft-from-question` (app/routers/ai.py:56-76, qa_service). BE/FE 공개 API·Phase C4 노출은 별도 정책. **PRD §5.1 Phase C** 참조.
 
 **설계 예정**: FE → POST /api/posts/{id}/ai-summary → BE가 답변 수집 후 FastAPI summarize-answers → FE AiSummaryCard.
 
@@ -362,4 +364,4 @@ flowchart TD
 | Phase | P1 (F1~F6) / P2 (F7~F8) / C (C1~C4) |
 | 검증 | I-P-O-E별 **miriart-be 실제 Java 라인** 명시(컨트롤러·서비스·DTO·Repository). 구현/설계/미구현 구분. |
 | BE 코드 정합 (최종) | F1 AuthController 54-59 + OAuth2TokenExchangeService 51-88. F2 UserController 41-45 + UserService 47-60. F3 AnalysisController 41-55 + AnalysisService 59-121. F4 AiChatController 37-42 + AiProxyService 83-126·133-156. F5 AnalysisController 57-62·65-69 + AnalysisService 129-132·138-141 + AnalysisRepository 19·21. F6 UserController 48-53 + UserService 67-81. C1 PostController 31-35 + findAll(pageable). |
-| 문서 갱신 규칙 | BE/API/인프라 변경 시: (1) 해당 기능 I-P-O-E·소스 라인 반영, (2) API_CONTRACT §9·§10·엔드포인트 목록 동기화, (3) miriarts_infra §4.4 구현 현황 필요 시 수정. PRD Phase 변경 시 §1 표·F7/F8/C2~C4 구현 상태·PRD 참조 문구 갱신. |
+| 문서 갱신 규칙 | BE/API/인프라 변경 시: (1) 해당 기능 I-P-O-E·소스 라인 반영, (2) API_CONTRACT §9·§10·엔드포인트 목록 동기화, (3) miriarts_infra §4.4 구현 현황 필요 시 수정. PRD Phase 변경 시 §1 표·F7/F8/C2~C4 구현 상태·PRD 참조 문구 갱신. (4) API_CONTRACT·갭 리포트 갱신 시 FSD F3/F4/C4 Exception·구현 상태 점검. |

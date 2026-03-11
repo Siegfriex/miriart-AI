@@ -57,7 +57,7 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 |------|------|------|----------|
 | 1 | `gcs_service.download_as_bytes()` | GCS에서 이미지 다운로드 | `gcs_uri` → bytes |
 | 2 | 프롬프트 구성 | 시스템: 미대입시 평가 전문가, 5축 채점 | — |
-| 3 | `gemini_client.call_gemini()` | Gemini Flash 호출 | model=Flash, temp=0.3, max_tokens=2048, mime=`application/json`, timeout=28s |
+| 3 | `gemini_client.call_gemini()` | Gemini Flash 호출 | model=Flash, temp=0.3, max_tokens=2048, mime=`application/json`, timeout=55s |
 | 4 | JSON 파싱 | LLM 응답 → 구조화 데이터 | `json.loads()` |
 
 **Gemini 호출 파라미터**:
@@ -65,8 +65,8 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 - Temperature: `0.3` (결정론적)
 - Max Output Tokens: `2048`
 - Response MIME: `application/json`
-- Timeout: `28s` (BE 30s - 2s 마진)
-- 리트라이: 3회, 지수 백오프 1→2→4s, jitter 0.5, HTTP [429,500,502,503,504]
+- Timeout: `55s`
+- 리트라이: 2회 (1회 재시도), initial_delay 1s, max_delay 8s, HTTP [429,500,502,503,504]
 
 ### O — Output
 
@@ -116,7 +116,7 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 | 예외 | HTTP | body.code | 발생 조건 | BE 매핑 |
 |------|------|-----------|-----------|---------|
 | `GCSError` | 502 | `GCS_ERROR` | GCS 다운로드 실패 (오브젝트 없음, 권한 등) | F003 |
-| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | Gemini 응답 28s 초과 | AN002 |
+| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | Gemini 응답 55s 초과 | AN002 |
 | `LLMServiceError` | 502 | `LLM_SERVICE_ERROR` | Gemini API 에러 (429/5xx 리트라이 소진) | AN001 |
 | `LLMParsingError` | 502 | `LLM_PARSING_ERROR` | Gemini JSON 응답 파싱 실패 | AN001 |
 
@@ -197,7 +197,7 @@ BE (Spring)                    AI (FastAPI)                   Vertex AI (Gemini)
 | 2 | 시스템 프롬프트 구성: "미대입시 AI 멘토, 200자 이내" + stickyContext 병합 |
 | 3 | history → `_flatten_history()`: "[role]: text\n" 형식 플랫텐 |
 | 4 | imageBase64 있으면 디코딩 → contents에 이미지+텍스트 결합 |
-| 5 | `call_gemini()`: temp=0.7, max_tokens=1024, timeout=28s |
+| 5 | `call_gemini()`: temp=0.7, max_tokens=1024, timeout=55s |
 
 ### O — Output
 
@@ -226,7 +226,7 @@ BE (Spring)                    AI (FastAPI)                   Vertex AI (Gemini)
 | 예외 | HTTP | body.code | 발생 조건 | BE 매핑 |
 |------|------|-----------|-----------|---------|
 | `ValidationError` | 400 | `VALIDATION_ERROR` | base64 이미지 디코딩 실패 | C001 |
-| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | Gemini 28s 초과 | AI002 |
+| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | Gemini 55s 초과 | AI002 |
 | `LLMServiceError` | 502 | `LLM_SERVICE_ERROR` | Gemini API 에러 | AI001 |
 
 ---
@@ -274,12 +274,12 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 | 단계 | 동작 | 파라미터 |
 |------|------|----------|
 | 1 | base64 디코딩 | `base64.b64decode()` |
-| 2 | `call_gemini()` | model=Flash, temp=0.4, max_tokens=2048, **timeout=55s**, `return_response=True` |
+| 2 | `call_gemini()` | model=Flash, temp=0.4, max_tokens=2048, **timeout=25s** (timeout_override_s=25), `return_response=True` |
 | 3 | 응답 파싱 | `candidates[0].content.parts` 순회 → text / inline_data 분리 |
 | 4 | GCS 업로드 | `gcs.upload_bytes("edited/{uuid}.jpg", image_bytes)` |
 
 **특이사항**:
-- Timeout이 55s로 다른 엔드포인트(28s)보다 긺 — 이미지 생성 소요 시간 고려
+- Timeout 25s (timeout_override_s=25). 기본 55s보다 짧게 설정.
 - `return_response=True`로 raw 응답 객체를 받아 이미지 바이너리 추출
 
 ### O — Output
@@ -303,7 +303,7 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 | 예외 | HTTP | body.code | 발생 조건 | BE 매핑 |
 |------|------|-----------|-----------|---------|
 | `ValidationError` | 400 | `VALIDATION_ERROR` | base64 디코딩 실패 | C001 |
-| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | Gemini 55s 초과 | AI002 |
+| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | Gemini 25s 초과 | AI002 |
 | `LLMServiceError` | 502 | `LLM_SERVICE_ERROR` | Gemini API 에러 | AI001 |
 | `GCSError` | 502 | `GCS_ERROR` | 편집 이미지 GCS 업로드 실패 | F003 |
 
@@ -350,7 +350,7 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 
 | 예외 | HTTP | body.code | 발생 조건 |
 |------|------|-----------|-----------|
-| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | 28s 초과 |
+| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | 55s 초과 |
 | `LLMServiceError` | 502 | `LLM_SERVICE_ERROR` | Gemini API 에러 |
 | `LLMParsingError` | 502 | `LLM_PARSING_ERROR` | JSON 파싱 실패 |
 
@@ -396,7 +396,7 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 | 예외 | HTTP | body.code | 발생 조건 |
 |------|------|-----------|-----------|
 | `ValidationError` | 400 | `VALIDATION_ERROR` | base64 이미지 디코딩 실패 |
-| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | 28s 초과 |
+| `LLMTimeoutError` | 504 | `LLM_TIMEOUT` | 55s 초과 |
 | `LLMServiceError` | 502 | `LLM_SERVICE_ERROR` | Gemini API 에러 |
 | `LLMParsingError` | 502 | `LLM_PARSING_ERROR` | JSON 파싱 실패 |
 
@@ -408,12 +408,13 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 
 | AI error_code | HTTP | body 구조 | 설명 |
 |---------------|------|-----------|------|
-| `LLM_TIMEOUT` | 504 | `{"code": "LLM_TIMEOUT", "detail": "..."}` | Gemini 응답 시간 초과 |
-| `LLM_SERVICE_ERROR` | 502 | `{"code": "LLM_SERVICE_ERROR", "detail": "..."}` | Gemini API 장애/에러 |
-| `LLM_PARSING_ERROR` | 502 | `{"code": "LLM_PARSING_ERROR", "detail": "..."}` | LLM JSON 응답 파싱 실패 |
-| `GCS_ERROR` | 502 | `{"code": "GCS_ERROR", "detail": "..."}` | GCS 읽기/쓰기 실패 |
-| `VALIDATION_ERROR` | 400 | `{"code": "VALIDATION_ERROR", "detail": "..."}` | 입력 유효성 검증 실패 |
-| `INTERNAL_ERROR` | 500 | `{"code": "INTERNAL_ERROR", "detail": "..."}` | 미처리 예외 |
+| `LLM_TIMEOUT` | 504 | `{"code": "LLM_TIMEOUT", "message": "..."}` | Gemini 응답 시간 초과 |
+| `LLM_SERVICE_ERROR` | 502 | `{"code": "LLM_SERVICE_ERROR", "message": "..."}` | Gemini API 장애/에러 |
+| `LLM_PARSING_ERROR` | 502 | `{"code": "LLM_PARSING_ERROR", "message": "..."}` | LLM JSON 응답 파싱 실패 |
+| `GCS_ERROR` | 502 | `{"code": "GCS_ERROR", "message": "..."}` | GCS 읽기/쓰기 실패 |
+| `VALIDATION_ERROR` | 400 | `{"code": "VALIDATION_ERROR", "message": "..."}` | 입력 유효성 검증 실패 |
+| `LLM_RATE_LIMITED` | 429 | `{"code": "LLM_RATE_LIMITED", "message": "..."}` | Gemini 429 |
+| `INTERNAL_ERROR` | 500 | `{"code": "INTERNAL_ERROR", "message": "..."}` | 미처리 예외 |
 
 ### AI → BE 에러 코드 매핑 (참조용)
 
@@ -431,13 +432,13 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 
 | 기능 | 모델 | Temp | Max Tokens | Timeout | Response Format | 리트라이 |
 |------|------|------|-----------|---------|-----------------|---------|
-| 작품 분석 | Flash | 0.3 | 2048 | 28s | JSON | 3회 |
-| AI 채팅 | PRO/Flash | 0.7 | 1024 | 28s | Text | 3회 |
-| 이미지 편집 | Flash | 0.4 | 2048 | **55s** | Raw (image+text) | 3회 |
-| QA 요약 | Flash | 0.3 | 1024 | 28s | JSON | 3회 |
-| QA 초안 | Flash | 0.5 | 1024 | 28s | JSON | 3회 |
+| 작품 분석 | Flash | 0.3 | 2048 | 55s | JSON | 2회 |
+| AI 채팅 | PRO/Flash | 0.7 | 1024 | 55s | Text | 2회 |
+| 이미지 편집 | Flash | 0.4 | 2048 | 25s | Raw (image+text) | 2회 |
+| QA 요약 | Flash | 0.3 | 1024 | 55s | JSON | 2회 |
+| QA 초안 | Flash | 0.5 | 1024 | 55s | JSON | 2회 |
 
-**공통 리트라이 정책**: 3회, 지수 백오프 1→2→4s, jitter ±0.5, 대상 HTTP [429, 500, 502, 503, 504]
+**공통 리트라이 정책**: 2회 (1회 재시도), initial_delay 1s, max_delay 8s, 대상 HTTP [429, 500, 502, 503, 504]
 
 ---
 

@@ -164,6 +164,7 @@
 | cloudbuild.yaml | 40 | --set-env-vars=GCP_PROJECT_ID=miriarts,... |
 | cloudbuild.yaml | 41 | --project=miriarts |
 | app/core/config.py | 22 | gcp_project_id 기본값 "miriart-dev" |
+| app/core/config.py | 26 | gemini_location 기본값 "global" (Gemini API 호출 리전) |
 | app/core/config.py | 23-25 | gcp_region, gcs_bucket_name, google_application_credentials |
 | Dockerfile | 10 | EXPOSE 8080 |
 | Dockerfile | 12 | CMD uvicorn --port 8080 |
@@ -262,63 +263,94 @@
 
 ## 8. 요약 체크리스트 (문서 수정 시)
 
-- [ ] **gemini_client**: timeout 55s (36), attempts=2 (38), 기본 effective_timeout 55s (84), 모델 ID gemini-2.5-flash / gemini-2.5-pro / gemini-2.0-flash-lite (59-61), AFC 비활성 (90) 반영.
-- [ ] **image_edit**: timeout_override_s=**25s** (image_edit_service.py:44) — 문서의 55s 제거.
-- [ ] **에러 body**: 모든 "detail" → **"message"** (error_handler.py:56,73,97) 로 통일.
-- [ ] **429**: LLMRateLimitError, HTTP 429, code LLM_RATE_LIMITED 문서 전반 추가 (exceptions.py:25-29, error_handler.py:29).
-- [ ] **예외 계층**: RUNBOOK에 LLMRateLimitError 추가.
-- [ ] **health**: RUNBOOK에서 `/internal/ai/health` 설명을 "미들웨어 제외만 있고 라우트 없음" 또는 "제외: /health"로 정리 (main.py:47-50, request_context.py:21).
-- [ ] **config**: GCP_PROJECT_ID 기본값 miriart-dev (config.py:22), prod는 miriarts (cloudbuild.yaml:40) 명시.
-- [ ] **참조 경로**: INFRA_SSOT_GUIDE에서 docs/SSOT → SSOT/ 수정. codebase-snapshot은 docs/ 존재 확인됨.
+- [x] **gemini_client**: timeout 55s (36), attempts=2 (38), 기본 effective_timeout 55s (84), 모델 ID gemini-2.5-flash / gemini-2.5-pro / gemini-2.0-flash-lite (59-61), AFC 비활성 (90) 반영.
+- [x] **image_edit**: timeout_override_s=**25s** (image_edit_service.py:44) — 문서의 55s 제거.
+- [x] **에러 body**: 모든 "detail" → **"message"** (error_handler.py:56,73,97) 로 통일.
+- [x] **429**: LLMRateLimitError, HTTP 429, code LLM_RATE_LIMITED 문서 전반 추가 (exceptions.py:25-29, error_handler.py:29).
+- [x] **예외 계층**: RUNBOOK에 LLMRateLimitError 추가.
+- [x] **health**: RUNBOOK에서 `/internal/ai/health` 설명을 "미들웨어 제외만 있고 라우트 없음" 또는 "제외: /health"로 정리 (main.py:47-50, request_context.py:21).
+- [x] **config**: GCP_PROJECT_ID 기본값 miriart-dev (config.py:22), prod는 miriarts (cloudbuild.yaml:40) 명시.
+- [x] **참조 경로**: INFRA_SSOT_GUIDE에서 docs/SSOT → SSOT/ 수정. codebase-snapshot은 docs/ 존재 확인됨.
+
+---
+
+## 추가 갭 요인 (동일 층위 미식별 → 문서 반영 권장)
+
+- **(A1)** 리트라이 백오프: 문서 "1→2→4s, 3회" → 코드는 **2회(1회 재시도), initial_delay 1s, max_delay 8s** (gemini_client.py:38-41).
+- **(A2)** **GEMINI_LOCATION** (gemini_location): config.py:26 기본값 "global", Gemini API 호출에 사용. 문서 env 인벤토리에 반영 (RUNBOOK §4.1, SSOT §3.2).
+- **(A3)** INTERNAL_ERROR 응답 메시지: 코드 `"Internal server error"` (error_handler.py:97). 문서 한글 "내부 서버 오류가 발생했습니다"와 불일치 → 영문으로 통일.
+- **(A4)** 400 VALIDATION_ERROR 시 body에 **errors** 배열 (field, message) 포함 — error_handler.py:70-79. 문서에 구조 명시.
+- **(A5)(A6)** 로그 이벤트: **gemini_call_start**, **gemini_call_rate_limited**, 서비스 레벨(예: analyze_pre_gemini) RUNBOOK §1.2 카탈로그 반영.
+- **(A7)** draft 필드: 문서 "200자 이내" — 코드 스키마에는 길이 제한 없음(schemas/qa.py). 프롬프트 유도만 있음.
+- **(A8)** 로컬 포트: uvicorn 8000 vs Docker/Cloud Run 8080, BE FASTAPI_INTERNAL_URL 선택 기준 문서 정리.
+
+**PRD·FSD 갱신 규칙** (코드·API_CONTRACT 변경 시): (1) FSD 해당 기능(F3/F4/C4 등) I-P-O-E·Exception·구현 상태 점검. (2) PRD §4.1 갭 표·SSOT 경로 점검. (3) 갭 리포트 §0·§1 값과 불일치 수치(타임아웃·에러코드) 정리.
 
 ---
 
 ## §9. 문서별 수정 체크리스트
 
-### MIRIART_AI_API_REFERENCE.md
+### MIRIART_AI_API_REFERENCE.md — 적용 완료
 
-- §5 에러 응답: `detail` → `message` 로 변경.
-- §5 에러 코드 표: **429 / LLM_RATE_LIMITED** 행 추가.
+- [x] §5 에러 응답: `detail` → `message` 로 변경.
+- [x] §5 에러 코드 표: **429 / LLM_RATE_LIMITED** 행 추가.
+- [x] §1 health Handler명 `health` 반영, §2.5 draft 200자 문구 수정.
 - (선택) 타임아웃/리트라이/모델 값이 §0·§1과 일치하는지 검토.
 
-### MIRIART_AI_IOPE_MAP.md
+### MIRIART_AI_IOPE_MAP.md — 적용 완료
 
-- §A P (analyze): timeout 28s → 55s, 리트라이 3회 → 2회. Model gemini-2.5-flash 유지.
-- §B: timeout 28s → 55s, 리트라이 3회 → 2회.
-- §C (edit-image): timeout 55s → **25s** (timeout_override_s=25).
-- §D, §E: timeout 28s → 55s, 리트라이 3회 → 2회.
-- 에러 표: body `detail` → `message`. **LLM_RATE_LIMITED (429)** 행 추가.
-- 통합 참조표: 동일 반영.
+- [x] §A P (analyze): timeout 28s → 55s, 리트라이 2회·백오프 문구 수정.
+- [x] §B: timeout 28s → 55s.
+- [x] §C (edit-image): timeout 55s → **25s** (timeout_override_s=25).
+- [x] §D, §E: timeout 55s, 에러 55s 초과 반영.
+- [x] 에러 표: body `detail` → `message`. **LLM_RATE_LIMITED (429)** 행 추가.
+- [x] 통합 참조표·Gemini 호출 파라미터 요약: 동일 반영.
 
-### MIRIART_AI_RUNBOOK.md
+### MIRIART_AI_RUNBOOK.md — 적용 완료
 
-- §2.1 예외 계층: **LLMRateLimitError** 추가.
-- §2.2 에러 매핑: LLMRateLimitError → 429, LLM_RATE_LIMITED 추가.
-- §2.3 에러 응답 형식: `detail` → `message`.
-- §1.2 HTTP 제외 경로: `/internal/ai/health` 설명 정리 (라우트 없음 명시).
-- §4.1 환경변수: GCP_PROJECT_ID 기본값 miriart-dev, prod miriarts 명시.
-- (선택) Gemini 로그 예시 model명이 gemini-2.5-flash 등과 일치하는지 확인.
+- [x] §2.1 예외 계층: **LLMRateLimitError** 추가.
+- [x] §2.2 에러 매핑: LLMRateLimitError → 429, body.message, INTERNAL_ERROR 영문 메시지.
+- [x] §2.3 에러 응답 형식: `detail` → `message`.
+- [x] §1.2 HTTP 제외 경로·Gemini 로그 이벤트(gemini_call_start, gemini_call_rate_limited) 추가.
+- [x] §4.1 환경변수: GCP_PROJECT_ID 기본값 miriart-dev, prod miriarts, GEMINI_LOCATION 추가.
+- [x] §6.3 타임아웃/리트라이: 55s, 25s(edit), 2회. §6.4 429 → LLMRateLimitError 문구.
 
-### SSOT/miriarts_infra.md
+### SSOT/miriarts_infra.md — 적용 완료
 
-- AI 타임아웃/리트라이/모델 관련 기술 시 §0·§1 코드라인과 맞출 것.
-- config 기본값: miriart-dev / prod miriarts 구분 명시.
+- [x] §3.1 FastAPI: gemini_location, config 기본값 명시.
+- [x] §3.2 GEMINI_LOCATION 행 추가, GCP_PROJECT_ID 기본값/prod 구분.
+- [x] §5.3 miriart-ai --set-env-vars 행에 GEMINI_LOCATION 선택 언급.
 
-### .cursor/INFRA_SSOT_GUIDE.md (및 .claude 동일본)
+### .cursor/INFRA_SSOT_GUIDE.md (및 .claude 동일본) — 적용 완료
 
-- 인프라 SSOT 경로: `docs/SSOT/miriarts_infra.md` → **SSOT/miriarts_infra.md** (또는 레포 루트 기준 상대경로).
+- [x] 인프라 SSOT 경로: `docs/SSOT/miriarts_infra.md` → **SSOT/miriarts_infra.md**.
 
-### docs/MiriArt_API_CONTRACT.md
+### docs/MiriArt_API_CONTRACT.md — 적용 완료
 
-- AI 분석/채팅 에러 코드·타임아웃 언급 시 429(LLM_RATE_LIMITED), 55s/25s 등 코드 기준과 정합성 검토.
+- [x] §8.0 내부 API 에러: 429 LLM_RATE_LIMITED, 55s/25s 타임아웃 반영.
+- [x] §9.7 AI 429·LLM_RATE_LIMITED 안내 추가. §10 SSOT 경로 정리.
+
+### docs/MiriArt_FSD_v2.md — 적용 완료
+
+- [x] §1 기능 범위 요약 표 C4: 구현 상태 **구현됨 (FastAPI)**, BE/FE 공개 노출 Phase C 정책 명시.
+- [x] §C4: 스텁(501) → **구현됨 (FastAPI)**. POST summarize-answers, draft-from-question (app/routers/ai.py:56-76, qa_service).
+- [x] F3 Exception: AI 504/429 반환 시 BE AN002 등 매핑, API_CONTRACT §8·§9 참조 보강.
+- [x] F4 Exception: 429(LLM_RATE_LIMITED) 시 BE 매핑 API_CONTRACT §9.7 참조 추가.
+- [x] Document Metadata 문서 갱신 규칙 (4): API_CONTRACT·갭 리포트 갱신 시 FSD F3/F4/C4 점검.
+
+### docs/MiriArt_PRD_v2.md — 적용 완료
+
+- [x] §0 검증 기준선: docs/SSOT/miriarts_infra.md → **SSOT/miriarts_infra.md** (레포 루트 기준).
+- [x] §4.1 갭 분석 SSOT: 동일 경로 수정.
+- [x] §4.1 표: C4 행 추가 (FastAPI 구현 완료).
 
 ---
 
 ## §10. 요약 체크리스트 (최종)
 
 - [ ] §0 코드라인 인벤토리 유지: 코드 변경 시 해당 파일·심볼·라인 갱신.
-- [ ] §1~§8 갭 항목: 문서 수정 후 "문서 기재" 열을 코드와 일치하도록 업데이트.
-- [ ] §9 문서별 체크리스트: 각 문서 수정 시 해당 문서 행에 체크.
+- [x] §1~§8 갭 항목: 문서 수정 완료 (2026-03-10 플랜 실행). "문서 기재" 열은 해당 문서 수정으로 반영됨.
+- [x] §9 문서별 체크리스트: 위 문서별 적용 완료 표시 반영.
 - [ ] 인프라 변경 시 §0.2 및 cloudbuild.yaml / config.py 라인 반영.
 
 ---

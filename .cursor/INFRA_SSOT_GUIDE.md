@@ -8,12 +8,12 @@
 
 | 용도 | 문서 경로 | 비고 |
 |------|-----------|------|
-| **인프라 SSOT** | `docs/SSOT/miriarts_infra.md` | GCP 리소스, 구성, 배포, TODO의 단일 참조. 변경 전·배포 전에 반드시 맞출 기준선. §5.3 BE Docker 빌드·Actuator 참고. |
+| **인프라 SSOT** | `SSOT/miriarts_infra.md` | GCP 리소스, 구성, 배포, TODO의 단일 참조. 변경 전·배포 전에 반드시 맞출 기준선. §5.3 BE Docker 빌드·Actuator 참고. |
 | **스키마 SSOT** | `docs/mysql_erd_v1.md` | **실제 DB(MySQL) 테이블·컬럼·인덱스**의 단일 참조. 역추출 기준. 정합성 점검은 §4. ERD_v2는 설계/Phase 확장용. |
-| **세션 리셋/첫 인지** | 본 GUIDE + `docs/SSOT/miriarts_infra.md` §운영 요약·§1 | 레포 구조·BE/AI·Cloud Run·시크릿은 SSOT 앞단·§1 참고. *(선택)* `docs/IDE_에이전트_올인원_프롬프트_v2_요약.md` 있으면 추가 참고. |
+| **세션 리셋/첫 인지** | 본 GUIDE + `SSOT/miriarts_infra.md` §운영 요약·§1 | 레포 구조·BE/AI·Cloud Run·시크릿은 SSOT 앞단·§1 참고. *(선택)* `docs/IDE_에이전트_올인원_프롬프트_v2_요약.md` 있으면 추가 참고. |
 | **SSOT 초안 재생성** | SSOT 변경 규칙(§하단) + “MiriArt 인프라 SSOT 문서 초안 생성” 프롬프트 | 새 SSOT 초안이 필요할 때 사용. |
 | **GCP 인프라 명세** | `docs/MiriArt_GCP_INFRA.md` | API, 서비스 계정, 버킷, Secret 목록 등 상세. |
-| **BE Cloud Run 배포** | `miriart-be/scripts/cloudrun-redeploy.ps1` + `docs/SSOT/miriarts_infra.md` §5.2 | 배포 명령·옵션의 현재 기준. *(레포에 있으면)* `docs/MiriArt_BE_CloudRun_CloudSQL_FIX.md` 참고. |
+| **BE Cloud Run 배포** | `miriart-be/scripts/cloudrun-redeploy.ps1` + `SSOT/miriarts_infra.md` §5.2 | 배포 명령·옵션의 현재 기준. *(레포에 있으면)* `docs/MiriArt_BE_CloudRun_CloudSQL_FIX.md` 참고. |
 | **BE 부팅·동작 보고서** | *(해당 파일 없음 시)* miriarts_infra.md §6.1·§5 | dev/prod 기동·health는 SSOT §6·§5 참고. miriart-be/docs/ 에 BE_*_boot_ok_report.md 있으면 추가 참고. |
 | **BE API·health 분석/패치** | miriart-be/docs/ 내 해당 파일 있으면 참고 | 없으면 SSOT·GCP_INFRA 기준으로 점검. |
 | **BE 재배포 스크립트** | `miriart-be/scripts/cloudrun-redeploy.ps1` | PowerShell: Cloud Build submit → gcloud run deploy. 로컬 Docker는 gradlew CRLF 처리 필요(Dockerfile 참고). |
@@ -31,7 +31,7 @@
 
 ## 3. 변경 시 동기화 (Change Policy 요약)
 
-- **Cloud Run / Cloud SQL / Redis / Secret Manager / Artifact Registry / 서비스 계정** 변경 시 → **배포 전에** `docs/SSOT/miriarts_infra.md` 해당 섹션(§2, §3, §4, §5)을 먼저 수정한다.
+- **Cloud Run / Cloud SQL / Redis / Secret Manager / Artifact Registry / 서비스 계정** 변경 시 → **배포 전에** `SSOT/miriarts_infra.md` 해당 섹션(§2, §3, §4, §5)을 먼저 수정한다.
 - **DB 스키마/엔티티** 변경 시 → **스키마 SSOT** `docs/mysql_erd_v1.md`를 기준으로 한다. DDL/역추출 변경 후 해당 문서 §1·§2·§4(정합성 점검) 갱신. 설계 문서 `docs/MiriArt_ERD_v2.md`와 불일치 시 조율(ERD_v2는 설계·미구현 테이블 포함).
 - **새 GCP 리소스** 추가 시 → §2(리소스 카탈로그)와 §3(환경변수·Secret 맵)을 함께 갱신한다.
 - **CI/CD 파이프라인** 변경 시 → §5(배포 & CI/CD)와 §7(개방 이슈/TODO) 상태를 함께 갱신한다.
@@ -53,7 +53,7 @@
 
 ### 5-1. SSOT 본문 갱신
 
-수정 내용에 맞춰 `docs/SSOT/miriarts_infra.md` 의 해당 섹션을 **즉시** 수정한다.
+수정 내용에 맞춰 `SSOT/miriarts_infra.md` 의 해당 섹션을 **즉시** 수정한다.
 
 | 수정한 대상 | 갱신할 SSOT 섹션 |
 |-------------|------------------|
@@ -92,7 +92,7 @@
 
 ---
 
-*이 지침은 `docs/SSOT/miriarts_infra.md`의 변경 규칙 및 기존 에이전트용 프롬프트를 요약한 것이다.*
+*이 지침은 `SSOT/miriarts_infra.md`의 변경 규칙 및 기존 에이전트용 프롬프트를 요약한 것이다.*
 
 docker build -t asia-northeast3-docker.pkg.dev/miriarts/miriart-images/miriart-be:latest .
 

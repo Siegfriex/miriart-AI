@@ -199,7 +199,7 @@
 
 | 서비스 | dev / prod 차이 | 소스(파일/라인) |
 |--------|------------------|------------------|
-| FastAPI | config 기본값 gcp_project_id `miriart-dev`, gcp_region `asia-northeast3`, gcs_bucket_name `miriart-bucket`. 로컬: .env·GOOGLE_APPLICATION_CREDENTIALS. Cloud Run: --set-env-vars GCP_PROJECT_ID=miriarts 등 | miriart-ai/app/core/config.py:22–25, miriart-ai/cloudbuild.yaml:32 |
+| FastAPI | config 기본값 gcp_project_id `miriart-dev`, gcp_region `asia-northeast3`, gemini_location `global`(Gemini API 호출 리전, GCP_REGION과 분리), gcs_bucket_name `miriart-bucket`. 로컬: .env·GOOGLE_APPLICATION_CREDENTIALS. Cloud Run: --set-env-vars GCP_PROJECT_ID=miriarts 등. Gemini 호출은 gemini_location 사용 (config.py:26, gemini_client.py:32). | miriart-ai/app/core/config.py:22–26, miriart-ai/cloudbuild.yaml:40 |
 | server | **(현재 비활성 / future use)** 레포 내 dev/prod 전용 설정 없음. PORT, ALLOWED_ORIGIN, GEMINI_API_KEY 환경변수 (추론) | server/index.ts:19, 24 |
 | FE | VITE_API_BASE_URL: dev 미설정 시 http://localhost:8080, prod 미설정 시 ''(빈 문자열). Vercel 등 prod에서는 반드시 BE URL로 설정 필요. | src/shared/config/api.ts:8-12 |
 
@@ -222,8 +222,9 @@
 | FRONTEND_OAUTH_SUCCESS_URL | miriart-frontend-oauth-url | miriart-be | OAuth 성공 후 FE 리다이렉트 URL | application.yml → miriart.frontend.oauth-success-url | application.yml:17 |
 | FASTAPI_INTERNAL_URL | (없음) | miriart-be | FastAPI AI Base URL. **Prod 확정값**: `https://miriart-ai-gzjczkus6q-du.a.run.app` (2026-03-10 수정, 기존 `-svc-` URL 404이었음) | application.yml → miriart.fastapi.internal-url, 배포 시 --set-env-vars | application.yml:19, WebClientConfig.java:33 |
 | GCS_BUCKET_NAME | (없음) | miriart-be | GCS 버킷명 | application.yml → miriart.gcs.bucket | application.yml:24 |
-| GCP_PROJECT_ID | (없음) | miriart-ai | Vertex/GCS 프로젝트 ID | config.py → gcp_project_id, cloudbuild --set-env-vars | miriart-ai/app/core/config.py:22 |
-| GCP_REGION | (없음) | miriart-ai | 리전 | config.py → gcp_region | config.py:23 |
+| GCP_PROJECT_ID | (없음) | miriart-ai | Vertex/GCS 프로젝트 ID. 기본값 `miriart-dev`, Prod `miriarts` (cloudbuild) | config.py → gcp_project_id, cloudbuild --set-env-vars | miriart-ai/app/core/config.py:22 |
+| GCP_REGION | (없음) | miriart-ai | Cloud Run/설정 리전 | config.py → gcp_region | config.py:23 |
+| GEMINI_LOCATION | (없음) | miriart-ai | Gemini API 호출 리전 (Cloud Run 리전과 분리) | config.py → gemini_location, 기본값 `global`, cloudbuild 미설정 시 기본값 | config.py:26, gemini_client.py:32 |
 | GCS_BUCKET_NAME | (없음) | miriart-ai | GCS 버킷명 | config.py → gcs_bucket_name | config.py:24 |
 | GOOGLE_APPLICATION_CREDENTIALS | (없음) | miriart-ai | 로컬 인증 JSON 경로 | config.py. Cloud Run 불필요 | config.py:25 |
 | VITE_API_BASE_URL | (없음) | FE | BE API Base URL | import.meta.env (Vite), 빌드 시 주입 | src/shared/api/miriartApi.ts |
@@ -499,7 +500,7 @@ MySQL `chat_sessions` / `chat_messages` 테이블·엔티티는 **없음**. 채�
 | 메모리/CPU | 1Gi, 1 | :29–30 |
 | 타임아웃 | 120 | :31 |
 | 동시성, min/max 인스턴스 | 미기재 | — |
-| --set-env-vars | GCP_PROJECT_ID=miriarts, GCP_REGION=asia-northeast3, GCS_BUCKET_NAME=miriart-bucket | :32 |
+| --set-env-vars | GCP_PROJECT_ID=miriarts, GCP_REGION=asia-northeast3, GCS_BUCKET_NAME=miriart-bucket (선택: GEMINI_LOCATION=global) | :40 |
 | --set-secrets | 없음 | — |
 
 ---
