@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     gcp_project_id: str = "miriart-dev"
     gcp_region: str = "asia-northeast3"
+    # Gemini API 호출 리전. Cloud Run 리전(gcp_region)과 분리하여 쿼터·모델 가용성 확보.
+    # prod: GEMINI_LOCATION=global (또는 us-central1). GCP_REGION=asia-northeast3은 Cloud Run 배포용.
+    gemini_location: str = "global"
     gcs_bucket_name: str = "miriart-bucket"
     google_application_credentials: str = ""
 

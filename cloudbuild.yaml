@@ -37,7 +37,7 @@ steps:
       - '--no-allow-unauthenticated'
       - '--invoker-iam-check'
       - '--service-account=miriart-ai-runner@miriarts.iam.gserviceaccount.com'
-      - '--set-env-vars=GCP_PROJECT_ID=miriarts,GCP_REGION=asia-northeast3,GCS_BUCKET_NAME=miriart-bucket'
+      - '--set-env-vars=GCP_PROJECT_ID=miriarts,GCP_REGION=asia-northeast3,GCS_BUCKET_NAME=miriart-bucket,GEMINI_LOCATION=global'
       - '--project=miriarts'
 
 images:

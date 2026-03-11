@@ -17,9 +17,6 @@ from app.core.exceptions import LLMRateLimitError, LLMServiceError, LLMTimeoutEr
 
 logger = logging.getLogger(__name__)
 
-# [DEBUG] SDK 내부 HTTP 호출 추적 — 배포 후 로그 확인 완료 시 제거
-logging.getLogger("google.genai").setLevel(logging.DEBUG)
-logging.getLogger("httpx").setLevel(logging.DEBUG)
 
 _client: Optional[genai.Client] = None
 
@@ -32,11 +29,11 @@ def get_genai_client() -> genai.Client:
         _client = genai.Client(
             vertexai=True,
             project=settings.gcp_project_id,
-            location=settings.gcp_region,
+            location=settings.gemini_location,  # Cloud Run 리전(gcp_region)과 분리
             http_options=types.HttpOptions(
                 timeout=55 * 1000,  # 55s (BE 60s - 5s margin)
                 retry_options=types.HttpRetryOptions(
-                    attempts=2,  # 429 등 일시적 에러 시 1회 재시도. AFC 비활성화로 호출 수 제어됨
+                    attempts=3,  # 429 등 일시적 에러 시 2회 재시도 (SDK 55s 내에서 완료)
                     initial_delay=1.0,
                     max_delay=8.0,
                     exp_base=2.0,
@@ -46,8 +43,9 @@ def get_genai_client() -> genai.Client:
             ),
         )
         logger.info(
-            "GenAI client initialized (project=%s, region=%s)",
+            "GenAI client initialized (project=%s, gemini_location=%s, cloud_run_region=%s)",
             settings.gcp_project_id,
+            settings.gemini_location,
             settings.gcp_region,
         )
     return _client
@@ -110,7 +108,7 @@ async def call_gemini(
             "has_image": any("image" in str(c) for c in content_types),
             "response_mime_type": response_mime_type,
             "afc_disabled": True,
-            "sdk_attempts": 2,
+            "sdk_attempts": 3,
             "sdk_timeout_ms": 55000,
         },
     )
