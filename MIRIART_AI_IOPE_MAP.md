@@ -412,7 +412,7 @@ BE (Spring)                    AI (FastAPI)                   GCS              V
 | `LLM_SERVICE_ERROR` | 502 | `{"code": "LLM_SERVICE_ERROR", "message": "..."}` | Gemini API 장애/에러 |
 | `LLM_PARSING_ERROR` | 502 | `{"code": "LLM_PARSING_ERROR", "message": "..."}` | LLM JSON 응답 파싱 실패 |
 | `GCS_ERROR` | 502 | `{"code": "GCS_ERROR", "message": "..."}` | GCS 읽기/쓰기 실패 |
-| `VALIDATION_ERROR` | 400 | `{"code": "VALIDATION_ERROR", "message": "..."}` | 입력 유효성 검증 실패 |
+| `VALIDATION_ERROR` | 400 | `{"code": "VALIDATION_ERROR", "message": "Request validation failed", "errors": [{"field": str, "message": str}, ...]}` | 입력 유효성 검증 실패 (RequestValidationError 시 errors 배열 포함) |
 | `LLM_RATE_LIMITED` | 429 | `{"code": "LLM_RATE_LIMITED", "message": "..."}` | Gemini 429 |
 | `INTERNAL_ERROR` | 500 | `{"code": "INTERNAL_ERROR", "message": "..."}` | 미처리 예외 |
 

@@ -4,6 +4,7 @@
 > **작성일**: 2026-03-10
 > **목적**: AI 서비스 전용 엔드포인트·스키마·스토리지 IO 인벤토리
 > **Swagger**: prod에서 비활성 (`docs_url=None, redoc_url=None`)
+> **타임아웃·리트라이**: analyze/chat/qa 55s, edit-image 25s, 리트라이 2회(1회 재시도) — 상세는 MIRIART_AI_IOPE_MAP.md·MIRIART_AI_RUNBOOK.md §6.3.
 
 ---
 
@@ -228,6 +229,25 @@ gcs = GcsService(bucket_name=_settings.gcs_bucket_name, project_id=_settings.gcp
 |------|------|------|
 | `code` | str | 머신 리더블 에러 코드 |
 | `message` | str | 사람 리더블 에러 메시지 |
+| `errors` | array (400만) | (선택) `VALIDATION_ERROR` 시 필드별 검증 실패 목록 — 각 요소 `{"field": str, "message": str}` |
+
+**400 VALIDATION_ERROR** 시 body에 `errors` 배열 포함 (RequestValidationError 처리, `app/core/error_handler.py`):
+
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "Request validation failed",
+  "errors": [
+    { "field": "gcsUri", "message": "field required" },
+    { "field": "analysisType", "message": "ensure this value has at most 50 characters" }
+  ]
+}
+```
+
+| errors[] 필드 | 타입 | 설명 |
+|---------------|------|------|
+| `field` | str | 검증 실패한 요청 필드(경로 마지막 성분) 또는 `"unknown"` |
+| `message` | str | Pydantic 검증 메시지 |
 
 ### 에러 코드 전체 목록
 

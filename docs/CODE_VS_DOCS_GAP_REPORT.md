@@ -295,7 +295,8 @@
 - [x] §5 에러 응답: `detail` → `message` 로 변경.
 - [x] §5 에러 코드 표: **429 / LLM_RATE_LIMITED** 행 추가.
 - [x] §1 health Handler명 `health` 반영, §2.5 draft 200자 문구 수정.
-- (선택) 타임아웃/리트라이/모델 값이 §0·§1과 일치하는지 검토.
+- [x] §5 **400 VALIDATION_ERROR** 시 body **errors** 배열 (field, message) 예시·표 명시 (A4 반영, 2026-03-10).
+- [x] 문서 상단 타임아웃·리트라이 기준 한 줄 추가 (55s/25s, 2회), IOPE_MAP·RUNBOOK 참조.
 
 ### MIRIART_AI_IOPE_MAP.md — 적용 완료
 
@@ -304,6 +305,7 @@
 - [x] §C (edit-image): timeout 55s → **25s** (timeout_override_s=25).
 - [x] §D, §E: timeout 55s, 에러 55s 초과 반영.
 - [x] 에러 표: body `detail` → `message`. **LLM_RATE_LIMITED (429)** 행 추가.
+- [x] 통합 참조표 **VALIDATION_ERROR**: body에 `errors` 배열 (field, message) 구조 명시 (A4 반영, 2026-03-10).
 - [x] 통합 참조표·Gemini 호출 파라미터 요약: 동일 반영.
 
 ### MIRIART_AI_RUNBOOK.md — 적용 완료
@@ -314,12 +316,14 @@
 - [x] §1.2 HTTP 제외 경로·Gemini 로그 이벤트(gemini_call_start, gemini_call_rate_limited) 추가.
 - [x] §4.1 환경변수: GCP_PROJECT_ID 기본값 miriart-dev, prod miriarts, GEMINI_LOCATION 추가.
 - [x] §6.3 타임아웃/리트라이: 55s, 25s(edit), 2회. §6.4 429 → LLMRateLimitError 문구.
+- [x] §5.1 BE 연동 시 URL: 로컬 `FASTAPI_INTERNAL_URL=http://localhost:8000`, prod Cloud Run AI URL (A8 반영, 2026-03-10).
 
 ### SSOT/miriarts_infra.md — 적용 완료
 
 - [x] §3.1 FastAPI: gemini_location, config 기본값 명시.
 - [x] §3.2 GEMINI_LOCATION 행 추가, GCP_PROJECT_ID 기본값/prod 구분.
 - [x] §5.3 miriart-ai --set-env-vars 행에 GEMINI_LOCATION 선택 언급.
+- [x] §3.2 FASTAPI_INTERNAL_URL: 로컬 8000 vs Prod Cloud Run URL 선택 기준 명시 (A8 반영, 2026-03-10).
 
 ### .cursor/INFRA_SSOT_GUIDE.md (및 .claude 동일본) — 적용 완료
 
@@ -343,6 +347,7 @@
 - [x] §0 검증 기준선: docs/SSOT/miriarts_infra.md → **SSOT/miriarts_infra.md** (레포 루트 기준).
 - [x] §4.1 갭 분석 SSOT: 동일 경로 수정.
 - [x] §4.1 표: C4 행 추가 (FastAPI 구현 완료).
+- [x] §6 리스크 표 "FastAPI 장애": BE Retry 3회 / AI 내부 리트라이 2회 구분 명시 (2026-03-10).
 
 ---
 

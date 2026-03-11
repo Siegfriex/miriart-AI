@@ -88,16 +88,16 @@
 ## 3. 실행 체크리스트 (복사용)
 
 ```
-[ ] T1 — API_REFERENCE / IOPE_MAP: 400 errors 배열 구조 명시
-[ ] T2 — RUNBOOK(또는 SSOT): FASTAPI_INTERNAL_URL 로컬 vs prod 한 줄
+[x] T1 — API_REFERENCE / IOPE_MAP: 400 errors 배열 구조 명시 (2026-03-10 수행)
+[x] T2 — RUNBOOK(또는 SSOT): FASTAPI_INTERNAL_URL 로컬 vs prod 한 줄 (2026-03-10 수행)
 [ ] T3 — (트리거) 코드 변경 시 §0 인벤토리 갱신
 [ ] T4 — (트리거) 인프라 변경 시 §0.2 갱신
 [ ] T5 — (트리거) API_CONTRACT/갭 리포트 갱신 시 FSD·PRD 점검
-[ ] T6 — (선택) API_REFERENCE 타임아웃/리트라이 일치 검토
-[ ] T7 — (선택) PRD §6 Retry 문구 정리
+[x] T6 — (선택) API_REFERENCE 타임아웃/리트라이 일치 검토 (2026-03-10 수행)
+[x] T7 — (선택) PRD §6 Retry 문구 정리 (2026-03-10 수행)
 [ ] T8 — (선택) §9 외 문서 갱신 또는 스냅샷 표기
 ```
 
 ---
 
-*문서 끝 — 2026-03-10*
+*문서 끝 — 2026-03-10 (T1·T2·T6·T7 반영 2026-03-10)*

@@ -220,7 +220,7 @@
 | KAKAO_CLIENT_ID | miriart-kakao-client-id | miriart-be | 카카오 OAuth2 Client ID | application-dev.yml (문서상 Secret 미등록) | application-dev.yml:35 |
 | KAKAO_CLIENT_SECRET | miriart-kakao-client-secret | miriart-be | 카카오 OAuth2 Secret | 동일 | 동일 |
 | FRONTEND_OAUTH_SUCCESS_URL | miriart-frontend-oauth-url | miriart-be | OAuth 성공 후 FE 리다이렉트 URL | application.yml → miriart.frontend.oauth-success-url | application.yml:17 |
-| FASTAPI_INTERNAL_URL | (없음) | miriart-be | FastAPI AI Base URL. **Prod 확정값**: `https://miriart-ai-gzjczkus6q-du.a.run.app` (2026-03-10 수정, 기존 `-svc-` URL 404이었음) | application.yml → miriart.fastapi.internal-url, 배포 시 --set-env-vars | application.yml:19, WebClientConfig.java:33 |
+| FASTAPI_INTERNAL_URL | (없음) | miriart-be | FastAPI AI Base URL. **로컬**: BE가 로컬 AI 호출 시 `http://localhost:8000` (uvicorn 기본 포트). **Prod**: `https://miriart-ai-gzjczkus6q-du.a.run.app` (Cloud Run miriart-ai, 2026-03-10 수정) | application.yml → miriart.fastapi.internal-url, 배포 시 --set-env-vars | application.yml:19, WebClientConfig.java:33 |
 | GCS_BUCKET_NAME | (없음) | miriart-be | GCS 버킷명 | application.yml → miriart.gcs.bucket | application.yml:24 |
 | GCP_PROJECT_ID | (없음) | miriart-ai | Vertex/GCS 프로젝트 ID. 기본값 `miriart-dev`, Prod `miriarts` (cloudbuild) | config.py → gcp_project_id, cloudbuild --set-env-vars | miriart-ai/app/core/config.py:22 |
 | GCP_REGION | (없음) | miriart-ai | Cloud Run/설정 리전 | config.py → gcp_region | config.py:23 |

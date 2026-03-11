@@ -113,7 +113,7 @@ async def analyze_artwork(req: InternalAnalyzeRequest) -> InternalAnalyzeRespons
         system_instruction=ANALYZE_SYSTEM_PROMPT,
         purpose="analyze_artwork",
         temperature=0.3,
-        max_output_tokens=2048,
+        max_output_tokens=8192,
         response_mime_type="application/json",
     )
 

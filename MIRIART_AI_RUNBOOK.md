@@ -323,6 +323,8 @@ curl -X POST http://localhost:8000/internal/ai/analyze \
 
 > 로컬에서는 IAM 체크가 없으므로 직접 호출 가능. `GOOGLE_APPLICATION_CREDENTIALS`로 GCS/Vertex AI 인증.
 
+**BE 연동 시 URL**: 로컬 개발은 AI를 uvicorn 8000으로 띄우면 BE의 `FASTAPI_INTERNAL_URL=http://localhost:8000` 사용; prod는 BE가 Cloud Run에 배포된 miriart-ai 서비스 URL을 사용 (SSOT/miriarts_infra.md §3.2 `FASTAPI_INTERNAL_URL` 참조).
+
 ### 5.2 Docker 로컬 빌드 / 실행
 
 ```bash
