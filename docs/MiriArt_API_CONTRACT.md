@@ -289,7 +289,7 @@
 | `F001` | 이미지 없음 |
 | `F002` | 파일 크기 초과 (10MB) |
 | `AN001` | AI 분석 실패 (FastAPI 에러) |
-| `AN002` | 분석 타임아웃 (30초) |
+| `AN002` | 분석 타임아웃 (55초) |
 
 ---
 
@@ -546,8 +546,9 @@
 | POST | /internal/ai/analyze | 작품 5축 분석 | 400 GCS URI 파싱 실패, 502 GCS/Gemini/파싱 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | ai.py, analyze_service.py |
 | POST | /internal/ai/chat | AI 멘토 채팅 | 502 Gemini 호출 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | ai.py, chat_service.py |
 | POST | /internal/ai/edit-image | 이미지 편집 | 502/504(25s)/429 LLM_RATE_LIMITED 등 | ai.py, image_edit_service.py |
-| POST | /internal/ai/summarize-answers | Q&A 요약 | **501** Phase C4 스텁 | ai.py:51-63 |
-| POST | /internal/ai/draft-from-question | 질문 초안 | **501** Phase C4 스텁 | ai.py:65-76 |
+| POST | /internal/ai/summarize-answers | Q&A 요약 | 502 Gemini/파싱 실패, 504 타임아웃, 429 LLM_RATE_LIMITED | ai.py:86-89, qa_service.py |
+| POST | /internal/ai/draft-from-question | 질문 초안 | 502 Gemini/파싱 실패, 504 타임아웃, 429 LLM_RATE_LIMITED | ai.py:98-105, qa_service.py |
+| GET | /internal/ai/status | 배포 설정 진단 | — (인증 필수) | ai.py:22-44 |
 | GET | /health | 헬스체크 | — | main.py:37-41 |
 
 *prefix `/internal/ai` 는 main.py:34에서 마운트. BE는 base URL + 위 경로로 호출.*
@@ -637,8 +638,9 @@
 | 코드 | HTTP | 메시지 | 소스(파일/라인) |
 |------|------|--------|------------------|
 | `AN001` | 502 | AI 분석 서비스 연결에 실패했습니다 | ErrorCode.java:50 |
-| `AN002` | 504 | 분석 시간이 초과됐습니다. 잠시 후 다시 시도해주세요 | ErrorCode.java:51 |
+| `AN002` | 504 | 분석 시간이 초과됐습니다. 잠시 후 다시 시도해주세요 (FastAPI timeout 55s) | ErrorCode.java:51 |
 | `AN003` | 404 | 분석 결과를 찾을 수 없습니다 | ErrorCode.java:52 |
+| `AN004` | 429 | AI 분석 요청이 너무 많습니다. 잠시 후 다시 시도해주세요 | FastAPI LLM_RATE_LIMITED(429) 매핑 |
 
 ### 9.6 Credit (MiriArt 신규)
 
@@ -652,9 +654,10 @@
 | 코드 | HTTP | 메시지 | 소스(파일/라인) |
 |------|------|--------|------------------|
 | `AI001` | 502 | AI 멘토 연결에 실패했습니다. 다시 시도해주세요 | ErrorCode.java:59 |
-| `AI002` | 504 | AI 응답 시간이 초과됐습니다 | ErrorCode.java:60 |
+| `AI002` | 504 | AI 응답 시간이 초과됐습니다 (FastAPI timeout 55s) | ErrorCode.java:60 |
+| `AI004` | 429 | AI 요청이 너무 많습니다. 잠시 후 다시 시도해주세요 | FastAPI LLM_RATE_LIMITED(429) 매핑 |
 
-> AI 서비스가 Gemini 429 시 **429 LLM_RATE_LIMITED** 를 반환. BE는 429 수신 시 재시도 유도 등 정책에 따라 매핑.
+> AI 서비스가 Gemini 429 시 **429 LLM_RATE_LIMITED** 를 반환. BE는 429 수신 시 AN004/AI004로 매핑.
 
 ### 9.8 Community (MiriArt 신규, Phase C)
 
@@ -727,8 +730,8 @@
 
 | 항목 | 값 |
 |------|-----|
-| Version | 1.1 |
-| Date | 2026-03-02 |
+| Version | 1.2 |
+| Date | 2026-03-11 |
 | Based on | Cariv BE `ErrorCode.java`, FE `gemini.ts`, Legacy FSD v1.3, Community Design v1.0; 코드 정합성: ErrorCode/GlobalExceptionHandler/SecurityConfig, miriart-ai FastAPI 스키마 |
 | Phase | P1 (Auth+AI) / P2 (Chat MySQL) / C (Community) |
 | 정합성 | §10 코드 기준 검증(I-P-O-E, CORS, 엔드포인트), §8 FastAPI 실 스키마·라인 인용, §9 ErrorCode 라인 인용. INFRA SSOT: docs/SSOT/miriarts_infra.md |
