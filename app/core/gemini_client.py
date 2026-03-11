@@ -56,9 +56,9 @@ def get_genai_client() -> genai.Client:
 class GeminiModel:
     """Gemini 모델 ID 상수."""
 
-    FLASH = "gemini-3-flash"
-    PRO = "gemini-3.1-pro-preview"
-    FLASH_LITE = "gemini-3.1-flash-lite-preview"
+    FLASH = "gemini-2.5-flash"
+    PRO = "gemini-2.5-pro"
+    FLASH_LITE = "gemini-2.0-flash-lite"
 
 
 async def call_gemini(
