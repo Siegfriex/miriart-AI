@@ -22,6 +22,13 @@ class LLMTimeoutError(MiriArtAIError):
         super().__init__(message, error_code="LLM_TIMEOUT")
 
 
+class LLMRateLimitError(MiriArtAIError):
+    """Gemini 429 RESOURCE_EXHAUSTED. BE/FE에서 재시도 유도용 429 반환."""
+
+    def __init__(self, message: str):
+        super().__init__(message, error_code="LLM_RATE_LIMITED")
+
+
 class LLMServiceError(MiriArtAIError):
     """Gemini 5xx 또는 SDK 에러. BE에서 AN001(분석 실패) / AI001(채팅 실패)로 매핑."""
 

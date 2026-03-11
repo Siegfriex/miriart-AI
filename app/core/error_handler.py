@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from app.core.exceptions import (
     GCSError,
     LLMParsingError,
+    LLMRateLimitError,
     LLMServiceError,
     LLMTimeoutError,
     MiriArtAIError,
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 ERROR_MAP = {
     LLMTimeoutError: (504, "LLM_TIMEOUT"),
+    LLMRateLimitError: (429, "LLM_RATE_LIMITED"),
     LLMServiceError: (502, "LLM_SERVICE_ERROR"),
     LLMParsingError: (502, "LLM_PARSING_ERROR"),
     GCSError: (502, "GCS_ERROR"),

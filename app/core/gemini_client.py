@@ -13,7 +13,7 @@ from google import genai
 from google.genai import types
 
 from app.core.config import get_settings
-from app.core.exceptions import LLMServiceError, LLMTimeoutError
+from app.core.exceptions import LLMRateLimitError, LLMServiceError, LLMTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +56,9 @@ def get_genai_client() -> genai.Client:
 class GeminiModel:
     """Gemini 모델 ID 상수."""
 
-    FLASH = "gemini-2.5-flash"
-    PRO = "gemini-2.5-pro"
-    FLASH_LITE = "gemini-2.0-flash-lite"
+    FLASH = "gemini-3-flash"
+    PRO = "gemini-3.1-pro-preview"
+    FLASH_LITE = "gemini-3.1-flash-lite-preview"
 
 
 async def call_gemini(
@@ -174,10 +174,20 @@ async def call_gemini(
 
     except Exception as e:
         latency = time.monotonic() - start
-        # [DEBUG] 에러 상세 분류 — 429 vs 5xx vs 기타
         err_str = str(e)
         is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
-        is_quota = "quota" in err_str.lower() or "rate" in err_str.lower()
+        if is_429:
+            logger.warning(
+                "gemini_call_rate_limited",
+                extra={
+                    "purpose": purpose,
+                    "model": model,
+                    "latency_s": round(latency, 2),
+                },
+            )
+            raise LLMRateLimitError(
+                f"Gemini rate limit (429). Please try again in a moment."
+            )
         logger.error(
             "gemini_call_error",
             extra={
@@ -185,10 +195,7 @@ async def call_gemini(
                 "model": model,
                 "error": err_str[:500],
                 "error_type": type(e).__name__,
-                "is_429": is_429,
-                "is_quota_related": is_quota,
                 "latency_s": round(latency, 2),
-                "effective_timeout_s": effective_timeout,
             },
             exc_info=True,
         )
