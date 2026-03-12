@@ -43,6 +43,7 @@ class StickyContext(BaseModel):
     analysis_comment: Optional[str] = None
     target_major: Optional[str] = None
     target_university: Optional[str] = None
+    summary_text: Optional[str] = None  # FE stickyContext.summaryText → 학생 분석 카드 요약 텍스트
 
 
 class InternalChatRequest(BaseModel):

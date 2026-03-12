@@ -45,13 +45,50 @@ def _get_effective_history(history: Optional[List[HistoryItem]]) -> List[History
     return history[-_MAX_HISTORY_TURNS:]
 
 
+_SUMMARY_TEXT_MAX_LEN = 500
+
+
 def _build_system_prompt(req: InternalChatRequest) -> str:
-    """sticky_context 기반으로 시스템 프롬프트를 구성."""
+    """sticky_context 기반으로 시스템 프롬프트를 구성.
+
+    - summary_text가 있으면 학생 분석 카드 전체를 한 덩어리로 사용 (개별 필드 중복 최소화).
+    - summary_text가 없으면 기존 grade/score/fixScope/대학예측/코멘트/목표를 개별 조합.
+
+    예시 (a) summary_text 있음:
+        ...시스템 프롬프트 기본...
+
+        학생 분석 요약:
+        B등급(72.5점) · 구조 재구성 필요 · 구도 3.2 / 색채 4.1 / ...
+        추천 대학: 홍익대(상향,68%) · 국민대(적정,82%) ...
+        목표: 시각디자인 / 홍익대
+
+    예시 (b) summary_text 없음 (기존 방식):
+        ...시스템 프롬프트 기본...
+
+        학생 분석 요약: 등급=B, 점수=72.5, fixScope=StructureRebuild.
+        레이더 지표={...}. 추천 대학군=홍익대(TOP,68%), ...
+        분석 코멘트: ... 목표 전공=시각디자인. 목표 대학=홍익대.
+    """
     system = CHAT_SYSTEM_PROMPT
     ctx = req.sticky_context
     if not ctx:
         return system
 
+    # (a) summary_text가 존재하면 한 덩어리 텍스트 사용
+    if ctx.summary_text:
+        summary = ctx.summary_text.strip()
+        if len(summary) > _SUMMARY_TEXT_MAX_LEN:
+            summary = summary[:_SUMMARY_TEXT_MAX_LEN] + "…(이하 생략)"
+            logger.warning("summary_text truncated: original length=%d", len(ctx.summary_text))
+        system += f"\n\n학생 분석 요약:\n{summary}"
+        # summary_text에 포함되지 않았을 수 있는 목표 정보만 보충
+        if ctx.target_major and ctx.target_major not in summary:
+            system += f"\n목표 전공={ctx.target_major}."
+        if ctx.target_university and ctx.target_university not in summary:
+            system += f"\n목표 대학={ctx.target_university}."
+        return system
+
+    # (b) summary_text 없음 → 개별 필드 조합 (기존 로직)
     system += f"\n\n학생 분석 요약: 등급={ctx.grade}, 점수={ctx.score}, fixScope={ctx.fix_scope}."
     if ctx.radar_data:
         system += f" 레이더 지표={ctx.radar_data}."
