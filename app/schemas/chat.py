@@ -3,7 +3,7 @@ AI 채팅 API용 Pydantic 스키마. Java BE ↔ FastAPI /internal/ai/chat 요�
 
 - 연계: routers/ai.chat, services/chat_service에서 사용. Java AiProxyService가 Redis 히스토리와 함께 전달.
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -20,8 +20,18 @@ class HistoryItem(BaseModel):
     parts: List[Dict[str, Any]]  # [{"text": "..."}]
 
 
+class UniversityPrediction(BaseModel):
+    """대학 예측 결과 한 건."""
+
+    model_config = _CAMEL
+
+    name: str
+    type: Literal["TOP", "MID", "SAFE"]
+    probability: float
+
+
 class StickyContext(BaseModel):
-    """채팅 세션에 고정되는 맥락(작품 등급·점수·fix_scope). 시스템 프롬프트 분기용."""
+    """채팅 세션에 고정되는 맥락(작품 등급·점수·fix_scope·대학예측·코멘트·목표). 시스템 프롬프트 분기용."""
 
     model_config = _CAMEL
 
@@ -29,6 +39,10 @@ class StickyContext(BaseModel):
     score: float
     fix_scope: str  # StructureRebuild | DetailTuning
     radar_data: Optional[Dict[str, float]] = None
+    university_predictions: Optional[List[UniversityPrediction]] = None
+    analysis_comment: Optional[str] = None
+    target_major: Optional[str] = None
+    target_university: Optional[str] = None
 
 
 class InternalChatRequest(BaseModel):

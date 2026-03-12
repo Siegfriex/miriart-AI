@@ -3,6 +3,8 @@ Java 백엔드 전용 내부 AI API 라우터. prefix /internal/ai 로 마운트
 
 - 연계: Java BE의 WebClient가 /internal/ai/analyze, /chat, /edit-image, /summarize-answers, /draft-from-question 호출.
 """
+import logging
+
 from fastapi import APIRouter
 
 from app.schemas.analyze import InternalAnalyzeRequest, InternalAnalyzeResponse
