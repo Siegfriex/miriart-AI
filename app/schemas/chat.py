@@ -26,7 +26,7 @@ class UniversityPrediction(BaseModel):
     model_config = _CAMEL
 
     name: str
-    type: Literal["TOP", "MID", "SAFE"]
+    type: Literal["TOP", "HIGH", "MID", "LOW", "SAFE"]
     probability: float
 
 
