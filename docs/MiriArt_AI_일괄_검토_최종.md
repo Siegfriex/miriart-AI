@@ -3,6 +3,7 @@
 > **목적**: AI 호출 방식, FastAPI 로직, 이미지 처리, Vertex/Gemini 사용, CORS, CRUD, 스토리지·스키마·엔터티·파라미터, AI 호출 빈도/방식/타임을 실 코드 라인 인용으로 정리  
 > **기준**: miriart-ai 레포 코드 및 docs/ API 계약·ERD·인프라 문서  
 > **작성일**: 2026-03-09
+> **과거 스냅샷 (2026-03-09).** Vertex 초기화/모델 취득은 현재 `app/core/gemini_client.py` (genai.Client, call_gemini) 기준으로 변경됨. 최신 엔드포인트·에러: SSOT/miriart-ai-infra.md §0, SSOT/miriart-ai-api.md.
 
 ---
 
@@ -275,7 +276,7 @@ def parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
 
 ### 7.2 스토리지·테이블 (문서·BE 기준)
 
-- **GCS 버킷**: `miriart-bucket` — 작품/편집/프로필/커뮤니티 이미지. *docs/MiriArt_GCP_INFRA.md §3, docs/SSOT/miriarts_infra.md.*
+- **GCS 버킷**: `miriart-bucket` — 작품/편집/프로필/커뮤니티 이미지. *docs/MiriArt_GCP_INFRA.md §3, SSOT/miriarts_infra.md.*
 - **MySQL 테이블(예시)**: `users`, `plans`, `analysis_usage_logs`, `analyses`, `posts`, `answers`, `comments`, `likes`, `personas`, `reputation_ledger`, `reports` 등. *docs/MiriArt_ERD_v2.md §1, §2.*  
 - **분석 관련**: `analyses`(분석 결과), `analysis_usage_logs`(월별 사용 카운트·CR001 한도). *API 계약 §4, 인프라 문서.*
 

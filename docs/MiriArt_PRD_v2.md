@@ -2,7 +2,7 @@
 
 > **목적**: Legacy PRD v1.1 갭 메우기 + 현 구현 상태 반영 + 커뮤니티 비전 통합
 > **버전**: 2.2 | **작성일**: 2026-02-22 | **최종 수정**: 2026-03-02
-> **검증 기준선**: `SSOT/miriarts_infra.md` (레포 루트 기준. miriart-ai 레포) + 코드베이스 (문서 정합성 검증일: 2026-03-02)
+> **검증 기준선**: `SSOT/miriarts_infra.md` (레포 루트 기준. miriart-ai 레포) + 코드베이스. AI 엔드포인트·스키마 실 라인: SSOT/miriart-ai-infra.md §0, SSOT/miriart-ai-api.md §1·§2. (문서 정합성 검증일: 2026-03-02)
 > **기반**: Legacy PRD v1.1, `MiriArt_FSD_v2.md`, `MiriArt_ERD_v2.md`, Community Design v1.0, FE Disassembly Report v1.0
 
 ---
@@ -210,7 +210,7 @@
 |--------|------|------|
 | Vision AI 정확도 한계 | 입시 도메인 등급이 실제 채점과 불일치 | 학원 MOU 데이터로 프롬프트 튜닝, 사용자 피드백 수렴 |
 | 커뮤니티 저품질 | 스팸/부적절 게시글 | 신고 시스템, 가명 책임 설계, 자동 블라인드 |
-| FastAPI 장애 | AI 서비스 다운 시 분석 불가 | Java BE가 AI 호출 시 Retry 3회; 타임아웃 시 사용자 안내 + 크레딧 환불 (AI 내부 Gemini 리트라이는 2회 — MIRIART_AI_IOPE_MAP·RUNBOOK 참조) |
+| FastAPI 장애 | AI 서비스 다운 시 분석 불가 | Java BE가 AI 호출 시 Retry 3회; 타임아웃 시 사용자 안내 + 크레딧 환불 (AI 내부 Gemini 리트라이는 코드 기준 3회 — SSOT/miriart-ai-flows.md, SSOT/miriart-ai-infra.md §0.1 참조) |
 | OAuth SSO 장애 | 카카오/구글 장애 시 로그인 완전 막힘 | 운영자용 ROLE_ADMIN 백도어 (DB 수동 부여) |
 | 타겟 시장 규모 | 기초디자인 수험생 유료 전환율 불확실 | MVP 단계 빠른 실증 (전환율/리텐션 측정) |
 
@@ -242,4 +242,4 @@
 | Cariv→MiriArt 패턴 전략 | - | `docs/Cariv→MiriArt 패턴 재사용 전략.md` |
 | VID v1.1 | 1.1 | `docs/VID_v1.0.md` |
 | Legacy PRD | 1.1 | `docs/legacy/dysprime_PRD_v1.md` |
-| PRD·FSD 정합성·갱신 규칙 | - | 문서 정합성·갱신 규칙은 **docs/CODE_VS_DOCS_GAP_REPORT.md** §PRD·FSD 갱신 규칙 및 §9 체크리스트 참조 |
+| PRD·FSD 정합성·갱신 규칙 | - | 문서 정합성·갱신 규칙은 **SSOT/miriart-ai-infra.md** (코드 메타) 및 API_CONTRACT·FSD 갱신 규칙 참조 |

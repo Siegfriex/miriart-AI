@@ -1,9 +1,12 @@
+> **⚠️ ARCHIVED (2026-03-15)**: 이 문서는 초기 기획 시점의 As-Is/To-Be 분석입니다. 현재 상태는 SSOT/ 문서와 코드를 참조하세요.
+
 # MiriArt-AI 종합 개발 명세서 v1.0
 
 > **문서 성격**: miriart-ai (Python/FastAPI) 마이크로서비스의 식별된 전체 이슈를 범주화하고, 각 범주별 구체적 코드/설정/프롬프트를 포함한 실행 가능한 개발 명세
 > **대상 독자**: MiriArt CTO / 로컬 에이전트 (Cursor)
 > **기준 문서**: SSOT v1.2, FSD v2.0, API_CONTRACT v1.0, PRD v2.2
 > **작성일**: 2026-03-09
+> **과거 스냅샷.** 타임아웃: 설계 당시 28s. 현재 구현 55s (analyze/chat/qa), 25s (image-edit) — gemini_client.py.
 
 ---
 
@@ -299,6 +302,8 @@ python-json-logger>=3.0.0
 | SDK retry attempts | 3 | Vertex 공식 권장: 429/5xx exponential backoff |
 | Cloud Run --timeout | 120s | 현행 유지. image-edit 장시간 작업 대비 |
 | asyncio.wait_for | 28s (기본), endpoint별 override | analyze: 28s, chat: 28s, image-edit: 55s |
+
+**문서 스냅샷**: 설계 당시 28s. **현재 구현: 55s** (analyze/chat/qa), **25s** (image-edit), `app/core/gemini_client.py` GEMINI_TIMEOUT_S, GEMINI_IMAGE_EDIT_TIMEOUT_S.
 
 image-edit만 55초인 이유: 이미지 생성/편집은 Gemini Vision + GCS 왕복이 추가.
 BE 측도 image-edit 전용 timeout 설정 필요 (현재 일괄 30s).

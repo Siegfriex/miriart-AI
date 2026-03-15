@@ -1,6 +1,6 @@
 # 미이행 요인 분석 및 앞으로 실행 태스크
 
-> **기준**: CODE_VS_DOCS_GAP_REPORT.md, PRD·FSD 갭 반영 플랜 실행 후 잔여 사항  
+> **기준**: SSOT/miriart-ai-infra.md (코드 메타), PRD·FSD 갭 반영 플랜 실행 후 잔여 사항  
 > **작성일**: 2026-03-10
 
 ---
@@ -22,7 +22,7 @@
 
 | 문서 | 항목 | 비고 |
 |------|------|------|
-| MIRIART_AI_API_REFERENCE.md | "(선택) 타임아웃/리트라이/모델 값이 §0·§1과 일치하는지 검토" | 선택으로 남겨 둠. 필요 시 1회 검토 태스크로 실행. |
+| SSOT/miriart-ai-api.md | 타임아웃/리트라이/모델 값은 SSOT/miriart-ai-infra.md §0.1·miriart-ai-flows.md 참조. | 코드 변경 시 infra §0 갱신. |
 
 ---
 
@@ -49,10 +49,10 @@
 | 문서 | 잔여 구버전 예시 | 비고 |
 |------|------------------|------|
 | docs/MiriArt_PRD_v2.md | §6 리스크 표 "Java BE Retry **3회**" (213행) | BE 재시도 정책은 BE 코드 기준으로 할 것. AI 쪽은 2회. |
-| docs/AI_AGENT_DEBUG_REPORT_2026-03-10.md | 기본 timeout **28s** | 과거 디버그 스냅샷. 갱신 시 55s로 정리 가능. |
-| docs/AI_AGENT_CODE_PARSING_REPORT.md | 타임아웃 28s(이미지편집 55s), 리트라이 **3회** | 동일. |
-| docs/BE_REFACTOR_REVIEW_REPORT.md | timeout **28** * 1000 (34행) | 과거 리뷰 시점. |
-| docs/miriarts_infra.md | AI "문서상 placeholder" 등 | **SSOT는 루트 SSOT/miriarts_infra.md**. docs/ 복사본은 구버전일 수 있음. |
+| docs/AI_AGENT_DEBUG_REPORT_2026-03-10.md | 기본 timeout **28s** | **현재: 55s** (gemini_client.py). 과거 스냅샷 문구 추가됨. |
+| docs/AI_AGENT_CODE_PARSING_REPORT.md | 타임아웃 28s(이미지편집 55s), 리트라이 **3회** | 현재: 55s/25s(edit), 3회. |
+| docs/BE_REFACTOR_REVIEW_REPORT.md | timeout **28** * 1000 (34행) | 현재 AI: 55s (gemini_client.py) 문구 추가됨. |
+| docs/miriarts_infra.md | AI "문서상 placeholder" 등 | **SSOT는 SSOT/miriarts_infra.md**. docs/ 복사본 — 상단에 원본 SSOT·갱신 정책 명시됨. |
 
 → **선택**: 위 문서들을 "참고용 과거 스냅샷"으로 두거나, 필요 시 별도 태스크로 갱신.
 
@@ -64,22 +64,22 @@
 
 | # | 태스크 | 대상 | 액션 |
 |---|--------|------|------|
-| T1 | **A4 반영** — 400 body에 errors 배열 명시 | MIRIART_AI_API_REFERENCE.md, MIRIART_AI_IOPE_MAP.md | §5(또는 에러 섹션)에 400 응답 예시 추가: `"code":"VALIDATION_ERROR", "message":"Request validation failed", "errors":[{"field":"...", "message":"..."}]` 및 필드 설명 표. |
-| T2 | **A8 반영** — 로컬 vs prod URL 한 줄 | MIRIART_AI_RUNBOOK.md (또는 SSOT 인프라 문서) | "로컬 개발: BE는 FASTAPI_INTERNAL_URL=http://localhost:8000; prod: Cloud Run AI URL" 수준 한 줄 추가. |
+| T1 | **A4 반영** — 400 body에 errors 배열 명시 | SSOT/miriart-ai-api.md §3 | 이미 반영됨 (error_handler.py:70-80). |
+| T2 | **A8 반영** — 로컬 vs prod URL 한 줄 | SSOT/miriart-ai-runbook.md §1.5 | 반영됨. |
 
 ### 2.2 트리거 기반 (변경 시 수행)
 
 | # | 트리거 | 태스크 | 대상 |
 |---|--------|--------|------|
-| T3 | **코드 변경** (app/ 라우터·서비스·스키마·core 등) | §0 코드라인 인벤토리 갱신 | CODE_VS_DOCS_GAP_REPORT.md §0.1 표 |
-| T4 | **인프라/배포 변경** (cloudbuild, config, env) | §0.2 및 관련 표 갱신 | CODE_VS_DOCS_GAP_REPORT.md §0.2, §8 |
+| T3 | **코드 변경** (app/ 라우터·서비스·스키마·core 등) | §0 코드라인 인벤토리 갱신 | SSOT/miriart-ai-infra.md §0.1 표 |
+| T4 | **인프라/배포 변경** (cloudbuild, config, env) | §0.2 및 관련 표 갱신 | SSOT/miriart-ai-infra.md §0.2, §2 |
 | T5 | **API_CONTRACT·갭 리포트 갱신** | FSD F3/F4/C4 Exception·구현 상태 점검, PRD §4.1·SSOT 경로 점검 | FSD 문서 갱신 규칙, PRD §4.1 |
 
 ### 2.3 선택 (여유 시)
 
 | # | 태스크 | 대상 |
 |---|--------|------|
-| T6 | API_REFERENCE §0·§1과 타임아웃/리트라이/모델 값 일치 검토 | MIRIART_AI_API_REFERENCE.md |
+| T6 | 타임아웃/리트라이/모델 값 일치 검토 | SSOT/miriart-ai-infra.md §0.1, SSOT/miriart-ai-flows.md |
 | T7 | PRD §6 "Retry 3회" 문구 정리 | BE 재시도 3회 유지 시 "AI는 2회" 등으로 구분 명시 가능 |
 | T8 | §9 외 문서 갱신 또는 "과거 스냅샷" 표기 | AI_AGENT_DEBUG_REPORT, AI_AGENT_CODE_PARSING_REPORT, BE_REFACTOR_REVIEW_REPORT, docs/miriarts_infra.md |
 

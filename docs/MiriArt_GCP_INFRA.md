@@ -4,6 +4,7 @@
 > **GCP 프로젝트명**: miriart | **GCP 프로젝트 ID**: `miriarts`
 > **리전**: asia-northeast3 (서울)
 > **세팅 상태**: ✅ 인프라 완료 | ✅ BE 실제 배포 완료 | ⏳ 카카오 OAuth 미등록 | ✅ FE URL 등록 완료
+> **상세 인프라·배포·운영 SSOT**: `SSOT/miriarts_infra.md`. 본 문서는 GCP 리소스·API·서비스 계정 목록 요약.
 
 ---
 

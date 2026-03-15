@@ -6,7 +6,7 @@
 
 - **vertexai → google-genai 마이그레이션**
   - `google-cloud-aiplatform`(vertexai) 제거, `google-genai>=1.5.0` 사용.
-  - `app/core/gemini_client.py`: `genai.Client(vertexai=True)` 싱글턴, `call_gemini()` async 래퍼 (타임아웃 28s, 리트라이, 구조화 로그).
+  - `app/core/gemini_client.py`: `genai.Client(vertexai=True)` 싱글턴, `call_gemini()` async 래퍼 (타임아웃 **55s** (GEMINI_TIMEOUT_S), 리트라이 3회, 구조화 로그).
   - `GeminiModel` 상수: FLASH, PRO, FLASH_LITE.
 
 - **예외/에러코드/타임아웃/로깅 구조**

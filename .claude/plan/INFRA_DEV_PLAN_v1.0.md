@@ -1,3 +1,5 @@
+> **⚠️ ARCHIVED (2026-03-15)**: 이 문서는 초기 기획 시점의 As-Is/To-Be 분석입니다. 현재 상태는 SSOT/ 문서와 코드를 참조하세요.
+
 # INFRA_DEV 실행 플랜 v1.0
 
 > **역할**: MiriArt GCP 인프라 전담. Cloud Run, Cloud Build, IAM, GCS, Logging/Monitoring을 SSOT(v1.2)와 일치하게 정리하고, miriart-ai 배포/운영 품질을 보장한다.
@@ -561,7 +563,7 @@ curl -s -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 | §5.2 배포 파라미터 | AI: 전체 파라미터 확정 (concurrency, min/max 등) |
 | §6.2 로그 & 모니터링 | log-based metrics, alert policy, dashboard 추가 |
 | §7 TODO | TODO-003(AI배포) 완료, TODO-006(관측성) 부분완료, TODO-007(BE파라미터) 진행중 |
-| CHANGELOG_infra.md | 날짜, INFRA_DEV 롤, 구체적 수정 내역 기록 |
+| miriart-ai-changelog.md | 날짜, INFRA_DEV 롤, 구체적 수정 내역 기록 |
 
 ---
 
@@ -595,7 +597,7 @@ curl -s -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 
 ### 완료 후
 - [ ] SSOT v1.2 갱신 (§2, §4, §5, §6, §7)
-- [ ] CHANGELOG_infra.md 기록
+- [ ] miriart-ai-changelog.md 기록
 
 ---
 

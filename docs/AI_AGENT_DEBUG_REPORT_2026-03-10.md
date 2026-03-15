@@ -1,6 +1,7 @@
 # miriart-ai FastAPI 디버깅 리포트 (2026-03-10)
 
 > 에이전트용 코드 탐색·체크포인트·Cloud Run·헬스체크 검증 결과.
+> **과거 스냅샷.** 현재 코드: 55s (gemini_client.py), image_edit 25s (GEMINI_IMAGE_EDIT_TIMEOUT_S).
 
 ---
 
@@ -52,8 +53,8 @@
 |------|-----|
 | **진입점** | `app/core/gemini_client.py` — `call_gemini()` |
 | **모델** | `GeminiModel.FLASH` (= `gemini-2.5-flash`), `GeminiModel.PRO` (= `gemini-2.5-pro`) |
-| **기본 timeout** | 28s (Python `asyncio.wait_for` + SDK `HttpOptions(timeout=28*1000)`) |
-| **image_edit** | `timeout_override_s=55` |
+| **기본 timeout** | 28s (당시). **현재 코드: 55s** (gemini_client.py:21, 89-90). |
+| **image_edit** | 당시 55. **현재: 25s** (GEMINI_IMAGE_EDIT_TIMEOUT_S, gemini_client.py:26). |
 | **temperature** | analyze 0.3, chat 0.7, image_edit 0.4, summarize/draft 0.3 |
 | **재시도** | SDK `HttpRetryOptions`: 429, 500, 502, 503, 504, attempts=3 |
 

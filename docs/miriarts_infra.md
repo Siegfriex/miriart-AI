@@ -2,6 +2,7 @@
 
 > **목적**: MiriArt GCP 인프라/배포/운영 관련 **단일 참조 문서(Single Source of Truth, SSOT)**.  
 > **규칙**: 실제 시크릿 값은 기재하지 않음. 환경변수/Secret 이름·용도·흐름만 기술. 코드·설정·문서에서 확인되지 않은 내용은 **(추론)**으로 표기.
+> **원본 SSOT**: `SSOT/miriarts_infra.md`. 이 파일은 복사본이며, 갱신 시 SSOT 본을 먼저 수정할 것.
 
 ---
 
@@ -9,7 +10,7 @@
 
 *이 섹션만 읽어도 신규 온콜이 대략 그림을 잡을 수 있도록 요약함.*
 
-- **사용자 요청 플로우**: FE(Vite/React) → BE(Spring Boot, Cloud Run) → AI(FastAPI, Cloud Run) → GCS/Vertex AI. FE는 `VITE_API_BASE_URL`로 BE만 호출하고, BE는 `FASTAPI_INTERNAL_URL`로 AI의 `/internal/ai/analyze`, `/internal/ai/chat`, `/internal/ai/edit-image` 등 호출. (전체 엔드포인트: docs/miriart-ai-codebase-snapshot.md §2.1)
+- **사용자 요청 플로우**: FE(Vite/React) → BE(Spring Boot, Cloud Run) → AI(FastAPI, Cloud Run) → GCS/Vertex AI. FE는 `VITE_API_BASE_URL`로 BE만 호출하고, BE는 `FASTAPI_INTERNAL_URL`로 AI의 `/internal/ai/analyze`, `/internal/ai/chat`, `/internal/ai/edit-image` 등 호출. (전체 엔드포인트 SSOT: SSOT/miriart-ai-infra.md §0.1)
 - **주요 GCP 리소스**: Cloud Run 2개(miriart-be, miriart-ai), Cloud SQL(MySQL miriart-mysql), Memorystore Redis(miriart-redis), GCS(miriart-bucket, miriart-build-cache), Secret Manager(DB/JWT/OAuth 등), Artifact Registry(miriart-images), Vertex AI(Gemini).
 - **인프라 TODO Top 3**: (1) BE 자동 배포/CI 부재 — Gradle+Dockerfile+gcloud 기반 수동/스크립트 배포, 중기에는 Cloud Build로 이식 예정 (TODO-004). (2) 카카오 OAuth Secret 미등록 (TODO-001). (3) 관측성 부족 — 알람·대시보드 미구축 (TODO-006).
 - **장애 시 먼저 확인할 위치**: (1) BE 헬스 `GET /actuator/health` (인증 불필요). (2) AI 헬스 `GET /health`. (3) Cloud Logging에서 서비스별 로그(miriart-be, miriart-ai) 및 GlobalExceptionHandler/스택 로그.
@@ -63,7 +64,7 @@
 [miriart-be (Spring Boot, Cloud Run)]
     │ Base URL: miriart.fastapi.internal-url → FASTAPI_INTERNAL_URL (기본값 http://localhost:8000)
     │ 소스: WebClientConfig.java:33, 42–44, AiProxyService.java:58–59, 97–98
-    │ 호출 path: POST /internal/ai/analyze, POST /internal/ai/chat, POST /internal/ai/edit-image 등 (전체: docs/miriart-ai-codebase-snapshot.md)
+    │ 호출 path: POST /internal/ai/analyze, POST /internal/ai/chat, POST /internal/ai/edit-image 등 (전체: SSOT/miriart-ai-infra.md §0.1)
     ▼
 [miriart-ai (FastAPI, Cloud Run)]  — prefix /internal/ai (miriart-ai/app/main.py:34)
     └→ Vertex AI, GCS
@@ -85,7 +86,7 @@
 | miriart-ai | asia-northeast3 | Python 3.11, uvicorn | 1Gi, 1 CPU | 120s | 미기재 | miriart-ai-runner@miriarts.iam.gserviceaccount.com | --no-allow-unauthenticated, 내부 전용 | miriart-ai/cloudbuild.yaml:17–33 |
 | server | (레포 내 배포 정의 없음) | Node 20 | Dockerfile만 존재 | — | — | — | **(현재 비활성 / future use)** (추론) | server/Dockerfile |
 
-프론트엔드는 GCP Cloud Run이 아닌 **Vercel**에 배포되며, FE 배포 설정의 SSOT는 Vercel 프로젝트 설정이다. *소스: README.md:82–100, 157 (Vercel 배포·연결), docs/SSOT/miriarts_central.md:223 (Vercel SPA 배포).*
+프론트엔드는 GCP Cloud Run이 아닌 **Vercel**에 배포되며, FE 배포 설정의 SSOT는 Vercel 프로젝트 설정이다. *소스: README.md:82–100, 157 (Vercel 배포·연결), SSOT/miriarts_central.md:223 (Vercel SPA 배포).*
 
 ### Cloud SQL (MySQL)
 
@@ -376,7 +377,7 @@ MySQL `chat_sessions` / `chat_messages` 테이블·엔티티는 **없음**. 채�
 |--------|-----------|------|------------------|
 | miriart-ai | Cloud Build + Cloud Run 자동 배포 (cloudbuild.yaml 기반). Docker 빌드 → Artifact Registry 푸시 → gcloud run deploy | OK (자동 배포) | miriart-ai/cloudbuild.yaml 전체 |
 | miriart-be | Gradle + Dockerfile + docker push(또는 Cloud Build submit) + gcloud run deploy. **스크립트**: `miriart-be/scripts/cloudrun-redeploy.ps1` (PowerShell, Cloud Build submit → deploy). 로컬 Docker 빌드 시 gradlew CRLF 처리·JAR 경로는 Dockerfile 참고 (§5.3). | 수동/스크립트 배포. 중기: Cloud Build 이식 예정 (TODO-004). | miriart-be/scripts/cloudrun-redeploy.ps1, miriart-be/Dockerfile |
-| Frontend | Vercel 프로젝트를 통한 Git push 기반 자동 빌드/배포 (추론) | OK (FE 배포 SSOT는 Vercel 설정) | README.md:82–100, 157, docs/SSOT/miriarts_central.md:223 |
+| Frontend | Vercel 프로젝트를 통한 Git push 기반 자동 빌드/배포 (추론) | OK (FE 배포 SSOT는 Vercel 설정) | README.md:82–100, 157, SSOT/miriarts_central.md:223 |
 | server | Dockerfile만 존재. 배포 파이프라인/Cloud Run 정의 없음 | **(현재 비활성 / future use)** | server/Dockerfile |
 
 ### 5.2 Cloud Run 배포 파라미터 SSOT
@@ -476,7 +477,7 @@ MySQL `chat_sessions` / `chat_messages` 테이블·엔티티는 **없음**. 채�
 - **새로운 GCP 리소스**가 추가되면, §2(리소스 카탈로그)와 §3(환경변수·Secret 맵)을 함께 업데이트한다.
 - **CI/CD 파이프라인** 변경 시 §5(배포 & CI/CD)와 §7(개방 이슈/TODO) 상태를 함께 갱신한다.
 - **공개 엔드포인트·인증·CORS** 변경 시 §4(네트워크 & 보안)를 갱신한다.
-- **에이전트가 인프라 관련 수정을 한 경우**: SSOT 해당 섹션 갱신 후 `docs/SSOT/CHANGELOG_infra.md`에 **날짜·에이전트 롤·구체적 수정 내역**을 기록한다. 상세: `.cursor/INFRA_SSOT_GUIDE.md` §5.
+- **에이전트가 인프라 관련 수정을 한 경우**: SSOT 해당 섹션 갱신 후 `SSOT/CHANGELOG_infra.md`에 **날짜·에이전트 롤·구체적 수정 내역**을 기록한다. 상세: `.cursor/INFRA_SSOT_GUIDE.md` §5.
 
 ---
 
@@ -490,7 +491,7 @@ MySQL `chat_sessions` / `chat_messages` 테이블·엔티티는 **없음**. 채�
 |------|-----------|-------------------|
 | miriart-be 자동 배포 | 수동 배포(로컬 스크립트로 표준화됨). 단기 목표는 표준화된 수동 배포 유지, 중기 목표는 Cloud Build 자동화 (TODO-004) | §5.1. Gradle+Dockerfile+gcloud 기반 수동/스크립트 배포 → **TODO-004** |
 | miriart-ai 자동 배포 | OK | §5.1. cloudbuild.yaml 기반 |
-| FE (Vercel 배포) | OK (Vercel 파이프라인에 의해 자동 배포) | FE 배포 세부 설정은 Vercel 프로젝트가 SSOT이며, 이 인프라 문서는 개요만 제공. README.md, docs/SSOT/miriarts_central.md |
+| FE (Vercel 배포) | OK (Vercel 파이프라인에 의해 자동 배포) | FE 배포 세부 설정은 Vercel 프로젝트가 SSOT이며, 이 인프라 문서는 개요만 제공. README.md, SSOT/miriarts_central.md |
 | server 배포 파이프라인 | (현재 비활성 / future use) | §5.1. Dockerfile만 존재 |
 | 롤백 전략 문서/절차 | 미흡 | §5. 문서에 롤백 절차 없음. BE 수동 배포 의존 → **TODO-004** 연관 |
 

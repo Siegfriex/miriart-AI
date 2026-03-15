@@ -334,7 +334,7 @@ class InternalImageEditRequest(BaseModel):
 - **설계**: Java BE만 호출하고 FE는 직접 접근하지 않으므로 CORS 미적용이 의도된 상태로 문서화되어 있음.
 
 **근거**  
-- `docs/miriart-ai-codebase-snapshot.md` 40–42: "CORS: 미적용. app/main.py에 CORSMiddleware 없음. BE만 호출하므로 의도된 설계"  
+- 코드 기준: app/main.py에 CORSMiddleware 없음. BE만 호출하므로 의도된 설계. 엔드포인트·코드 메타: SSOT/miriart-ai-infra.md §0.1.  
 - `SSOT/miriarts_infra.md` 311–312: "miriart-ai | CORS 미들웨어 없음. BE만 호출 | — | miriart-ai/app/main.py"
 
 ---

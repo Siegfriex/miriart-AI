@@ -14,7 +14,7 @@
 | 항목 | Dev Spec | 실코드 | 일치 |
 |------|----------|--------|------|
 | Client 초기화 | `genai.Client(vertexai=True, project=..., location=..., http_options=...)` | 동일 (`app/core/gemini_client.py` 28-42행) | ✓ |
-| timeout | `28 * 1000` (28s) | `28 * 1000` (34행) | ✓ |
+| timeout | `28 * 1000` (28s) | 당시 28s. **현재 AI: 55s** (gemini_client.py GEMINI_TIMEOUT_S). | — |
 | retry attempts | 3 | 36행 `attempts=3` | ✓ |
 | initial_delay | 1.0 | 37행 `initial_delay=1.0` | ✓ |
 | max_delay | 8.0 | 38행 `max_delay=8.0` | ✓ |
@@ -31,7 +31,7 @@
             project=settings.gcp_project_id,
             location=settings.gcp_region,
             http_options=types.HttpOptions(
-                timeout=28 * 1000,  # 28s (BE 30s - 2s margin)
+                timeout=28 * 1000,  # 당시 28s. 현재 코드: GEMINI_TIMEOUT_MS (55s, gemini_client.py:22).
                 retry_options=types.HttpRetryOptions(
                     attempts=3,
                     initial_delay=1.0,

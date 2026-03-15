@@ -543,51 +543,50 @@
 
 | 메서드 | 경로 | 용도 | FastAPI 에러 | 소스(파일/라인) |
 |--------|------|------|--------------|------------------|
-| POST | /internal/ai/analyze | 작품 5축 분석 | 400 GCS URI 파싱 실패, 502 GCS/Gemini/파싱 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | ai.py, analyze_service.py |
-| POST | /internal/ai/chat | AI 멘토 채팅 | 502 Gemini 호출 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | ai.py, chat_service.py |
-| POST | /internal/ai/edit-image | 이미지 편집 | 502/504(25s)/429 LLM_RATE_LIMITED 등 | ai.py, image_edit_service.py |
-| POST | /internal/ai/summarize-answers | Q&A 요약 | 502 Gemini/파싱 실패, 504 타임아웃, 429 LLM_RATE_LIMITED | ai.py:86-89, qa_service.py |
-| POST | /internal/ai/draft-from-question | 질문 초안 | 502 Gemini/파싱 실패, 504 타임아웃, 429 LLM_RATE_LIMITED | ai.py:98-105, qa_service.py |
-| GET | /internal/ai/status | 배포 설정 진단 | — (인증 필수) | ai.py:22-44 |
-| GET | /health | 헬스체크 | — | main.py:37-41 |
+| POST | /internal/ai/analyze | 작품 5축 분석 | 400 GCS URI 파싱 실패, 502 GCS/Gemini/파싱 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | app/routers/ai.py:49-56, analyze_service.py |
+| POST | /internal/ai/chat | AI 멘토 채팅 | 502 Gemini 호출 실패, 504 타임아웃(55s), 429 LLM_RATE_LIMITED | app/routers/ai.py:59-67, chat_service.py |
+| POST | /internal/ai/edit-image | 이미지 편집 | 502/504(25s)/429 LLM_RATE_LIMITED 등 | app/routers/ai.py:69-78, image_edit_service.py |
+| POST | /internal/ai/summarize-answers | Q&A 요약 | 502 Gemini/파싱 실패, 504 타임아웃, 429 LLM_RATE_LIMITED | app/routers/ai.py:81-90, qa_service.py |
+| POST | /internal/ai/draft-from-question | 질문 초안 | 502 Gemini/파싱 실패, 504 타임아웃, 429 LLM_RATE_LIMITED | app/routers/ai.py:93-105, qa_service.py |
+| GET | /internal/ai/status | 배포 설정 진단 | — (인증 필수) | app/routers/ai.py:24-45 |
+| GET | /health | 헬스체크 | — | app/main.py:46-50 |
 
-*prefix `/internal/ai` 는 main.py:34에서 마운트. BE는 base URL + 위 경로로 호출.*
+*prefix `/internal/ai` 는 app/main.py:43에서 마운트. BE는 base URL + 위 경로로 호출. 에러 시 JSON body는 `code`, `message` (app/core/error_handler.py:55-56).*
 
 ### 8.1 작품 분석
 
-**POST** `/internal/ai/analyze` — *소스: miriart-ai/app/routers/ai.py:19-27, app/schemas/analyze.py, app/services/analyze_service.py.*
+**POST** `/internal/ai/analyze` — *소스: app/routers/ai.py:49-56, app/schemas/analyze.py:14-58, app/services/analyze_service.py:74-140.*
 
-- 요청 (camelCase): `InternalAnalyzeRequest` — gcsUri, analysisType (`basic` \| `major`), problemText(optional). *Java: InternalAnalyzeRequest.java; Python: analyze.py:15-22.*
-- 응답 (camelCase): grade(A\|B\|C\|D\|F), totalScore, radarData(RadarData), fixScope(StructureRebuild\|DetailTuning), comment, universityPredictions(배열, Phase 2 Theory 연동 전 빈 배열). *Python: analyze_service.py:148-161 — university_predictions=[]; Java: InternalAnalyzeResponse.java — radarData/universityPredictions는 JSON 문자열로 역직렬화.*
+- 요청 (camelCase): `InternalAnalyzeRequest` — gcsUri, analysisType (`basic` \| `major`), problemText(optional). *Python: InternalAnalyzeRequest (analyze.py:14-21).*
+- 응답 (camelCase): grade(A\|B\|C\|D\|F), totalScore, radarData(RadarData), fixScope(StructureRebuild\|DetailTuning), comment, universityPredictions(배열). *Python: InternalAnalyzeResponse (analyze.py:48-58); analyze_service에서 GCSError/LLMParsingError → error_handler ERROR_MAP (error_handler.py:28-35) → 502.*
 
 ### 8.2 AI 채팅
 
-**POST** `/internal/ai/chat` — *소스: miriart-ai/app/routers/ai.py:30-38, app/schemas/chat.py, app/services/chat_service.py.*
+**POST** `/internal/ai/chat` — *소스: app/routers/ai.py:59-67, app/schemas/chat.py:48-70, app/services/chat_service.py:129-181.*
 
-- 요청 (camelCase): modelType, message, sessionId(optional), stickyContext(optional), imageBase64, imageMimeType, history(optional). *Python: InternalChatRequest (chat.py:34-44); Java: InternalChatRequest.java.*
-- 응답 (camelCase): text, groundingUrls, quickReplies. *Python: InternalChatResponse (chat.py:47-54); Java: InternalChatResponse.java.*
+- 요청 (camelCase): modelType, message, sessionId(optional), stickyContext(optional), imageBase64, imageMimeType, history(optional). *Python: InternalChatRequest (chat.py:48-59).*
+- 응답 (camelCase): text, groundingUrls, quickReplies. *Python: InternalChatResponse (chat.py:62-70).* 예외 → error_handler ERROR_MAP: LLMTimeoutError→504, LLMRateLimitError→429, LLMServiceError→502 (exceptions.py:18-36, error_handler.py:28-35).
 
 ### 8.3 이미지 편집
 
-**POST** `/internal/ai/edit-image`
+**POST** `/internal/ai/edit-image` — *소스: app/routers/ai.py:69-78, app/schemas/image_edit.py:14-29, app/services/image_edit_service.py:27-78.*
 
-- *소스: miriart-ai/app/routers/ai.py:41-48, app/schemas/image_edit.py.*
-- 요청 (camelCase): `{ "imageBase64": "...", "prompt": "레트로 필터 추가" }` — *InternalImageEditRequest*
-- 응답: `{ "text": "...", "imageUrl": "https://..." }` — *InternalImageEditResponse*. *소스: image_edit.py:24-29.*
+- 요청 (camelCase): `{ "imageBase64": "...", "prompt": "레트로 필터 추가" }` — *InternalImageEditRequest (image_edit.py:14-20).*
+- 응답: `{ "text": "...", "imageUrl": "https://..." }` — *InternalImageEditResponse (image_edit.py:23-29).* timeout_override_s=GEMINI_IMAGE_EDIT_TIMEOUT_S(25) (gemini_client.py:26, image_edit_service.py:44).
 
 ### 8.4 Q&A 답변 요약 (Phase C4)
 
-**POST** `/internal/ai/summarize-answers`
+**POST** `/internal/ai/summarize-answers` — *소스: app/routers/ai.py:81-90, app/schemas/qa.py:14-28, app/services/qa_service.py:57-76.*
 
-- 요청: `{ "question": "...", "answers": ["답변1", "답변2"] }`
-- 응답: `{ "summary": "3줄 요약", "supplement": "추가 설명" }`
+- 요청: `{ "question": "...", "answers": ["답변1", "답변2"] }` — *SummarizeAnswersRequest (qa.py:14-20).*
+- 응답: `{ "summary": "3줄 요약", "supplement": "추가 설명" }` — *SummarizeAnswersResponse (qa.py:23-28).*
 
 ### 8.5 질문 초안 생성 (Phase C4)
 
-**POST** `/internal/ai/draft-from-question`
+**POST** `/internal/ai/draft-from-question` — *소스: app/routers/ai.py:93-105, app/schemas/qa.py:32-47, app/services/qa_service.py:80-114.*
 
-- 요청: `{ "title": "...", "content": "...", "imageBase64"?: "..." }`
-- 응답: `{ "draft": "AI 초안 답변..." }`
+- 요청: `{ "title": "...", "content": "...", "imageBase64"?: "..." }` — *DraftFromQuestionRequest (qa.py:32-38).*
+- 응답: `{ "draft": "AI 초안 답변..." }` — *DraftFromQuestionResponse (qa.py:41-47).*
 
 ---
 
@@ -659,7 +658,20 @@
 
 > AI 서비스가 Gemini 429 시 **429 LLM_RATE_LIMITED** 를 반환. BE는 429 수신 시 AN004/AI004로 매핑.
 
-### 9.8 Community (MiriArt 신규, Phase C)
+### 9.8.1 FastAPI 에러 응답 (miriart-ai 코드 기준)
+
+| 예외 클래스 | HTTP | body.code | 소스(파일/라인) |
+|-------------|------|-----------|------------------|
+| LLMTimeoutError | 504 | LLM_TIMEOUT | app/core/exceptions.py:18-22, app/core/error_handler.py:29 |
+| LLMRateLimitError | 429 | LLM_RATE_LIMITED | exceptions.py:25-29, error_handler.py:30 |
+| LLMServiceError | 502 | LLM_SERVICE_ERROR | exceptions.py:32-36, error_handler.py:31 |
+| LLMParsingError | 502 | LLM_PARSING_ERROR | exceptions.py:39-43, error_handler.py:32 |
+| GCSError | 502 | GCS_ERROR | exceptions.py:46-50, error_handler.py:33 |
+| ValidationError | 400 | VALIDATION_ERROR | exceptions.py:53-57, error_handler.py:34 |
+
+*모든 에러 응답 JSON body: `{"code": "...", "message": "..."}` (error_handler.py:55-56). RequestValidationError → 400, code VALIDATION_ERROR, errors 배열 (error_handler.py:70-80).*
+
+### 9.9 Community (MiriArt 신규, Phase C)
 
 | 코드 | HTTP | 메시지 | 소스(파일/라인) |
 |------|------|--------|------------------|
@@ -714,6 +726,15 @@
 
 *전체 SSOT: miriarts_infra.md §4.2, §4.4.*
 
+### 10.4 FastAPI (miriart-ai) 엔드포인트·예외 검증
+
+| 항목 | 소스(파일/라인) |
+|------|------------------|
+| 엔드포인트 일람 | SSOT/miriart-ai-infra.md §0.1 app/routers/ai.py 테이블 (GET /status, POST /analyze, /chat, /edit-image, /summarize-answers, /draft-from-question), GET /health (app/main.py:46-50). 상세: SSOT/miriart-ai-api.md §1. |
+| prefix 마운트 | app/main.py:43 |
+| ERROR_MAP (예외→HTTP, code) | app/core/error_handler.py:28-35 |
+| 에러 body 필드 | code, message (error_handler.py:55-56) |
+
 ---
 
 ## 11. FE 현 ApiService 마이그레이션 매핑
@@ -734,4 +755,4 @@
 | Date | 2026-03-11 |
 | Based on | Cariv BE `ErrorCode.java`, FE `gemini.ts`, Legacy FSD v1.3, Community Design v1.0; 코드 정합성: ErrorCode/GlobalExceptionHandler/SecurityConfig, miriart-ai FastAPI 스키마 |
 | Phase | P1 (Auth+AI) / P2 (Chat MySQL) / C (Community) |
-| 정합성 | §10 코드 기준 검증(I-P-O-E, CORS, 엔드포인트), §8 FastAPI 실 스키마·라인 인용, §9 ErrorCode 라인 인용. INFRA SSOT: docs/SSOT/miriarts_infra.md |
+| 정합성 | §10 코드 기준 검증(I-P-O-E, CORS, 엔드포인트), §8 FastAPI 실 스키마·라인 인용, §9·§9.8.1 ErrorCode/ FastAPI 예외 라인 인용. INFRA SSOT: SSOT/miriarts_infra.md |

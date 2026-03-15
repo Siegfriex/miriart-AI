@@ -3,7 +3,7 @@
 > **목적**: MiriArt MVP 기능명세 (F1~F8 + Community Phase C). Phase 구분·I-P-O-E·코드 기준 검증.
 > **버전**: 2.0 | **작성일**: 2026-02-22 | **최종 수정**: 2026-03-02
 > **기반**: Legacy FSD v1.3, 확정 결정 세트, Community Design v1.0
-> **검증 기준**: 아래 모든 “소스”는 실제 코드·파일·라인 기준. 소스는 miriart-be 실제 Java 라인 기준. 구현·예외·엔드포인트는 miriarts_infra §4.4, API_CONTRACT §9·§10 참조.
+> **검증 기준**: 아래 모든 “소스”는 실제 코드·파일·라인 기준. 소스는 miriart-be 실제 Java 라인 기준. 구현·예외·엔드포인트는 SSOT/miriarts_infra §4.4, API_CONTRACT §8·§9·§9.8.1·§10 참조. AI(FastAPI) 실 라인은 SSOT/miriart-ai-infra.md §0 및 SSOT/miriart-ai-api.md §1·§8.
 > **요청/응답 스키마·에러코드 전체·토큰 보안 전제**는 **MiriArt_API_CONTRACT.md** §1~§9 참조. 본 FSD는 기능 흐름·Process·BE 라인 위주.
 
 **선행 조건·가정**: 모든 API(토큰·리프레시 제외)는 JWT 인증. FE는 `VITE_API_BASE_URL`로 BE만 호출. BE는 `FASTAPI_INTERNAL_URL`(miriart.fastapi.internal-url)로 AI 호출. *miriarts_infra §1.2.*
@@ -165,7 +165,7 @@ needsProfile === false → /app/home
 | **Input** | `POST /api/analyses` multipart: `@RequestPart("image")` MultipartFile, `@RequestParam("analysisType")` String, `@RequestParam(value="problemText", required=false)` String | `AnalysisController.java:41-46` — startAnalysis 파라미터. Analysis 엔티티 problem_text length 500은 `Analysis.java:51-52` |
 | **Process** | 1. `image == null \|\| image.isEmpty()` → F001 2. **needsProfile=true일 때만** 크레딧 한도 체크(usedThisMonth ≥ monthlyLimit → CR001). needsProfile=false면 스킵. 3. GCS 업로드 4. analyses INSERT PENDING 5. FastAPI analyze 호출 6. complete/fail + save 7. analysis_usage_logs INSERT 8. AnalysisStartResponse 반환 | `AnalysisService.java` startAnalysis() — 한도 체크 `if (user.isNeedsProfile()) { ... }`. PlanType.FREE=5. `AiProxyService.java:51-75` analyze() |
 | **Output** | 202 Accepted. body `AnalysisStartResponse`: analysisId(String.valueOf(analysis.getId())), status(analysis.getStatus().name()), message(고정 "분석 중입니다. 약 8초 소요됩니다.") | `AnalysisController.java:49` `ResponseEntity.accepted().body(ApiResponse.success(result))`; `AnalysisStartResponse.java:22-27` from() |
-| **Exception** | F001(64-66), CR001(73-75), F003(50-53 컨트롤러 catch IOException→FILE_UPLOAD_FAILED), AN001/AN002(AiProxyService 62-73) | `AnalysisService.java:64-66, 73-75`; `AnalysisController.java:50-53`; `ErrorCode.java:45,54,47,50-51` |
+| **Exception** | F001(64-66), CR001(73-75), F003(50-53 컨트롤러 catch IOException→FILE_UPLOAD_FAILED), AN001/AN002(AiProxyService 62-73). FastAPI 쪽: 502/504/429 → error_handler ERROR_MAP (API_CONTRACT §9.8.1, app/core/error_handler.py:28-35). | `AnalysisService.java:64-66, 73-75`; `AnalysisController.java:50-53`; `ErrorCode.java:45,54,47,50-51` |
 
 AI 504/429 반환 시 BE AN002 등 매핑. 상세는 API_CONTRACT §8·§9.
 
@@ -315,7 +315,7 @@ AI 504/429 반환 시 BE AN002 등 매핑. 상세는 API_CONTRACT §8·§9.
 
 ### C4: AI 연결 (Q&A 요약/초안)
 
-**구현 상태**: **구현됨 (FastAPI)**. `POST /internal/ai/summarize-answers`, `POST /internal/ai/draft-from-question` (app/routers/ai.py:56-76, qa_service). BE/FE 공개 API·Phase C4 노출은 별도 정책. **PRD §5.1 Phase C** 참조.
+**구현 상태**: **구현됨 (FastAPI)**. `POST /internal/ai/summarize-answers` (app/routers/ai.py:81-90), `POST /internal/ai/draft-from-question` (93-105), qa_service. BE/FE 공개 API·Phase C4 노출은 별도 정책. **PRD §5.1 Phase C** 참조.
 
 **설계 예정**: FE → POST /api/posts/{id}/ai-summary → BE가 답변 수집 후 FastAPI summarize-answers → FE AiSummaryCard.
 
