@@ -240,8 +240,9 @@ async def chat(req: InternalChatRequest) -> InternalChatResponse:
 
     except (_json.JSONDecodeError, KeyError, PydanticValidationError, ValueError) as e:
         reason = (
-            "empty_sections" if isinstance(e, ValueError)
+            "json_parse_error" if isinstance(e, _json.JSONDecodeError)
             else "validation_error" if isinstance(e, PydanticValidationError)
+            else "empty_sections" if isinstance(e, ValueError)
             else "json_parse_error"
         )
         logger.warning(
