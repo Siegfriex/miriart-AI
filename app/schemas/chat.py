@@ -10,6 +10,9 @@ from pydantic.alias_generators import to_camel
 
 _CAMEL = ConfigDict(populate_by_name=True, alias_generator=to_camel, serialize_by_alias=True)
 
+# Structured Chat v3: 채팅 응답 전용 ConfigDict (기존 _CAMEL과 동일 구조)
+_CHAT_CAMEL = ConfigDict(alias_generator=to_camel, populate_by_name=True, serialize_by_alias=True)
+
 
 class HistoryItem(BaseModel):
     """대화 히스토리 한 건. Vertex AI Content와 대응, role + parts(텍스트)."""
@@ -60,11 +63,23 @@ class InternalChatRequest(BaseModel):
     history: Optional[List[HistoryItem]] = Field(default_factory=list)
 
 
+class ChatSection(BaseModel):
+    """AI 채팅 응답 섹션 — JSON Wire: camelCase. Structured Chat v3."""
+
+    model_config = _CHAT_CAMEL
+
+    type: Literal["strength", "improvement", "action"]
+    title: str
+    text: str
+
+
 class InternalChatResponse(BaseModel):
     """채팅 응답. AI 멘토 텍스트·grounding URL·퀵리플라이. Java에서 FE로 그대로 전달."""
 
-    model_config = _CAMEL
+    model_config = _CHAT_CAMEL
 
     text: str
+    summary: Optional[str] = None
+    sections: Optional[List[ChatSection]] = None
     grounding_urls: List[str] = []
     quick_replies: List[str] = []

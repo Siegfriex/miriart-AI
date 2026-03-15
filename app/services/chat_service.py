@@ -5,14 +5,17 @@ AI 멘토 채팅 서비스. Gemini로 대화 생성. 기본 퀵리플라이 3개
 - sticky_context(등급·점수·fix_scope·대학예측·코멘트·목표)로 시스템 프롬프트에 반영.
 """
 import base64
+import json as _json
 import logging
+import re
 from typing import List, Optional
 
 from google.genai import types as genai_types
+from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 from app.core.gemini_client import call_gemini, GeminiModel
 from app.core.exceptions import ValidationError
-from app.schemas.chat import HistoryItem, InternalChatRequest, InternalChatResponse
+from app.schemas.chat import ChatSection, HistoryItem, InternalChatRequest, InternalChatResponse
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +30,41 @@ MODEL_MAP = {
     "IMAGE_EDIT": GeminiModel.FLASH,
 }
 
-CHAT_SYSTEM_PROMPT = """당신은 MiriArt의 미술 입시 AI 멘토입니다.
-학생의 미술 작품 분석 결과와 맥락을 바탕으로 친절하고 전문적인 상담을 제공합니다.
+_DEFAULT_QUICK_REPLIES = ["구도 분석 요청", "색감 피드백", "합격 확률 보기"]
+_FALLBACK_TEXT = "(응답을 구조화하지 못했습니다. 내용을 다시 확인해 주세요.)"
 
-규칙:
-1. 미술 전문 용어를 사용하되, 고등학생이 이해할 수 있게 설명하세요.
-2. 구체적이고 실천 가능한 조언을 제공하세요.
-3. 학생의 현재 수준(grade, fixScope)을 고려한 맞춤 조언을 하세요.
-4. 격려와 동기부여를 포함하되, 현실적인 피드백도 함께 제공하세요.
-5. 충분한 깊이로 답변하되, 핵심을 놓치지 마세요."""
+
+# ── response_schema용 내부 Pydantic 모델 (SDK가 JSON Schema로 변환) ──
+class _SectionSchema(BaseModel):
+    type: str
+    title: str
+    text: str
+
+
+class _ChatResponseSchema(BaseModel):
+    summary: str
+    sections: List[_SectionSchema]
+
+
+CHAT_SYSTEM_PROMPT = """당신은 MiriArt의 미술 입시 AI 멘토입니다.
+학생의 미술 작품 분석 결과와 맥락을 바탕으로 실질적인 피드백을 제공합니다.
+
+[응답 형식 — 반드시 아래 JSON만 출력하세요. 코드블록 없이 순수 JSON만.]
+{
+  "summary": "이번 피드백의 핵심 한 줄 (50자 이내)",
+  "sections": [
+    { "type": "strength",    "title": "잘하고 있는 것",        "text": "구체적 근거와 함께 격려. 3~5문장." },
+    { "type": "improvement", "title": "지금 당장 바꿔야 할 것", "text": "포장 없이 직설적으로. 문제→이유→영향 순서. 3~5문장." },
+    { "type": "action",      "title": "다음 2주 실천 전략",     "text": "번호 매긴 구체 행동 2~3개. 동사로 시작. 3~5문장." }
+  ]
+}
+
+[톤 규칙]
+- strength: 격려하되 근거를 반드시 포함. '잘했어요'로만 끝내지 말 것.
+- improvement: 단호하게. '~인 것 같아요' 표현 금지. 문제를 직접 명시.
+- action: 오늘 당장 실행 가능한 수준으로. 추상적 조언 금지.
+- 전체: 고등학생이 이해할 수 있는 미술 전문 용어. 총 1,200자 이내.
+- JSON 외 다른 텍스트(코드블록 포함) 절대 출력 금지."""
 
 
 def _get_effective_history(history: Optional[List[HistoryItem]]) -> List[HistoryItem]:
@@ -168,14 +197,66 @@ async def chat(req: InternalChatRequest) -> InternalChatResponse:
         purpose="chat",
         temperature=0.7,
         max_output_tokens=_CHAT_MAX_OUTPUT_TOKENS,
+        response_mime_type="application/json",
+        response_schema=_ChatResponseSchema,
     )
 
-    return InternalChatResponse(
-        text=raw.strip(),
-        grounding_urls=[],
-        quick_replies=[
-            "이 부분을 더 자세히 알려주세요",
-            "연습 방법을 추천해주세요",
-            "비슷한 대학은 어디가 있나요?",
-        ],
-    )
+    # ── JSON 전처리: 간헐적 마크다운 래핑 방어 ──
+    cleaned = re.sub(r"^\s*```(?:json)?\s*", "", raw.strip())
+    cleaned = re.sub(r"\s*```\s*$", "", cleaned).strip()
+
+    # ── 구조화 파싱 시도 ──
+    try:
+        parsed = _json.loads(cleaned)
+        raw_sections = parsed.get("sections") or []
+
+        if not raw_sections:
+            raise ValueError("empty_sections")
+
+        sections = [
+            ChatSection(type=s["type"], title=s.get("title", ""), text=s.get("text", ""))
+            for s in raw_sections
+        ]
+        summary = parsed.get("summary", "")
+
+        # 하위 호환 text: [제목]\n본문 join (Redis 저장·히스토리 재로드 호환)
+        fallback_text = "\n\n".join(f"[{s.title}]\n{s.text}" for s in sections)
+
+        logger.info(
+            "chat_response_format",
+            extra={
+                "response_format": "structured",
+                "sections_count": len(sections),
+                "session_id": req.session_id,
+            },
+        )
+        return InternalChatResponse(
+            text=fallback_text,
+            summary=summary,
+            sections=sections,
+            grounding_urls=[],
+            quick_replies=_DEFAULT_QUICK_REPLIES,
+        )
+
+    except (_json.JSONDecodeError, KeyError, PydanticValidationError, ValueError) as e:
+        reason = (
+            "empty_sections" if isinstance(e, ValueError)
+            else "validation_error" if isinstance(e, PydanticValidationError)
+            else "json_parse_error"
+        )
+        logger.warning(
+            "chat_response_format",
+            extra={
+                "response_format": "fallback",
+                "reason": reason,
+                "session_id": req.session_id,
+            },
+        )
+        text_out = raw.strip() or _FALLBACK_TEXT
+        return InternalChatResponse(
+            text=text_out,
+            summary=None,
+            sections=None,
+            grounding_urls=[],
+            quick_replies=_DEFAULT_QUICK_REPLIES,
+        )

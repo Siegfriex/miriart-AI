@@ -77,6 +77,7 @@ async def call_gemini(
     temperature: float = 0.7,
     max_output_tokens: int = 4096,
     response_mime_type: Optional[str] = None,
+    response_schema: Optional[Any] = None,
     return_response: bool = False,
 ) -> Any:
     """
@@ -97,6 +98,8 @@ async def call_gemini(
     )
     if response_mime_type:
         config.response_mime_type = response_mime_type
+    if response_schema:
+        config.response_schema = response_schema
 
     # [DEBUG] 호출 직전 상태 로그 — H1~H6 가설 검증용
     content_types = []
